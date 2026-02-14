@@ -376,6 +376,43 @@ class TestRealtimeRedisCache:
             app.dependency_overrides.clear()
 
     @patch("src.api.realtime.get_redis")
+    def test_invalid_cache_ttl_uses_default(
+        self,
+        mock_get_redis: AsyncMock,
+        mock_db_session: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Invalid CACHE_TTL_S falls back to default 5s, no 500."""
+        monkeypatch.setenv("CACHE_TTL_S", "not-a-number")
+
+        redis_mock = _mock_redis_client(cached_value=None)
+        mock_get_redis.return_value = redis_mock
+
+        orm_sample = _make_orm_sample()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = orm_sample
+        mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+        from src.api.deps import get_db
+        from src.api.main import app
+
+        app.dependency_overrides[get_db] = _override_db_factory(mock_db_session)
+        try:
+            with TestClient(app) as new_client:
+                response = new_client.get(
+                    REALTIME_URL,
+                    params={"device_id": DEVICE_ID},
+                    headers=AUTH_HEADER,
+                )
+                assert response.status_code == 200
+
+                # TTL should fall back to 5
+                call_args = redis_mock.set.call_args
+                assert call_args[1].get("ex") == 5
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("src.api.realtime.get_redis")
     def test_redis_failure_falls_back_to_db(
         self,
         mock_get_redis: AsyncMock,

@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -85,14 +86,17 @@ async def query_series(
 
     # Try continuous aggregate view first; fall back to raw table with
     # time_bucket() if the view does not exist (e.g. fresh dev environment).
+    # Only catch ProgrammingError (undefined table/view) — other DB errors
+    # should propagate to expose real issues.
     try:
         return await _query_view(db, device_id, config)
-    except Exception:
+    except ProgrammingError:
         logger.warning(
-            "View '%s' query failed, falling back to raw table with time_bucket('%s')",
+            "View '%s' not available, falling back to raw table with time_bucket('%s')",
             config.source_view,
             config.bucket_interval,
         )
+        await db.rollback()
         return await _query_raw_fallback(db, device_id, config)
 
 
@@ -131,7 +135,7 @@ async def _query_raw_fallback(
         f"AVG(battery_soc_pct) AS avg_battery_soc_pct, "
         f"AVG(load_power_w) AS avg_load_power_w, "
         f"AVG(export_power_w) AS avg_export_power_w, "
-        f"COUNT(*) AS sample_count "
+        f"SUM(sample_count) AS sample_count "
         f"FROM sungrow_samples "
         f"WHERE device_id = :device_id"
     )

@@ -560,3 +560,74 @@ class TestAggregationService:
 
         with pytest.raises(KeyError):
             await query_series(mock_session, DEVICE_ID, "invalid")
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_raw_table_on_programming_error(self) -> None:
+        """View query ProgrammingError triggers raw table fallback."""
+        from sqlalchemy.exc import ProgrammingError
+
+        from src.services.aggregation import query_series
+
+        mock_session = AsyncMock()
+        mock_session.rollback = AsyncMock()
+
+        # First call (view) raises ProgrammingError, second (fallback) succeeds
+        fallback_result = MagicMock()
+        fallback_result.mappings.return_value.all.return_value = [
+            _make_bucket_row(),
+        ]
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                ProgrammingError("", {}, Exception("relation does not exist")),
+                fallback_result,
+            ]
+        )
+
+        result = await query_series(mock_session, DEVICE_ID, "day")
+        assert len(result) == 1
+
+        # Verify rollback was called after the failed view query
+        mock_session.rollback.assert_awaited_once()
+
+        # Verify fallback SQL uses time_bucket and sungrow_samples
+        fallback_sql = str(mock_session.execute.call_args_list[1][0][0])
+        assert "time_bucket" in fallback_sql
+        assert "sungrow_samples" in fallback_sql
+        assert "SUM(sample_count)" in fallback_sql
+
+    @pytest.mark.asyncio
+    async def test_fallback_uses_sum_sample_count(self) -> None:
+        """Fallback SQL uses SUM(sample_count), not COUNT(*)."""
+        from sqlalchemy.exc import ProgrammingError
+
+        from src.services.aggregation import query_series
+
+        mock_session = AsyncMock()
+        mock_session.rollback = AsyncMock()
+
+        fallback_result = MagicMock()
+        fallback_result.mappings.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                ProgrammingError("", {}, Exception()),
+                fallback_result,
+            ]
+        )
+
+        await query_series(mock_session, DEVICE_ID, "month")
+        fallback_sql = str(mock_session.execute.call_args_list[1][0][0])
+        assert "SUM(sample_count)" in fallback_sql
+        assert "COUNT(*)" not in fallback_sql
+
+    @pytest.mark.asyncio
+    async def test_non_programming_error_propagates(self) -> None:
+        """Non-ProgrammingError DB exceptions are not caught."""
+        from src.services.aggregation import query_series
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(
+            side_effect=RuntimeError("connection lost"),
+        )
+
+        with pytest.raises(RuntimeError, match="connection lost"):
+            await query_series(mock_session, DEVICE_ID, "day")
