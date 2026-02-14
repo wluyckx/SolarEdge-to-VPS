@@ -176,7 +176,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-010" status="pending" complexity="L" tdd="required">
+<story id="STORY-010" status="in_progress" complexity="L" tdd="required">
   <title>Ingest endpoint</title>
   <dependencies>STORY-008, STORY-009</dependencies>
 

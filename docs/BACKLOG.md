@@ -155,23 +155,23 @@
 <phase id="1" name="Edge Foundation" story_file="docs/stories/phase-1-edge-foundation.md">
   <story id="STORY-001" status="done" complexity="M" tdd="recommended" />
   <story id="STORY-002" status="done" complexity="M" tdd="required" />
-  <story id="STORY-003" status="pending" complexity="L" tdd="required" />
-  <story id="STORY-004" status="pending" complexity="M" tdd="required" />
+  <story id="STORY-003" status="in_progress" complexity="L" tdd="required" />
+  <story id="STORY-004" status="in_progress" complexity="M" tdd="required" />
   <story id="STORY-005" status="done" complexity="M" tdd="required" />
-  <story id="STORY-006" status="pending" complexity="M" tdd="required" />
+  <story id="STORY-006" status="in_progress" complexity="M" tdd="required" />
 </phase>
 
 <phase id="2" name="VPS Ingestion" story_file="docs/stories/phase-2-vps-ingestion.md">
   <story id="STORY-007" status="done" complexity="M" tdd="recommended" />
   <story id="STORY-008" status="done" complexity="L" tdd="required" />
   <story id="STORY-009" status="done" complexity="S" tdd="required" />
-  <story id="STORY-010" status="pending" complexity="L" tdd="required" />
+  <story id="STORY-010" status="in_progress" complexity="L" tdd="required" />
 </phase>
 
 <phase id="3" name="API Features" story_file="docs/stories/phase-3-api-features.md">
   <story id="STORY-011" status="pending" complexity="M" tdd="required" />
   <story id="STORY-012" status="pending" complexity="L" tdd="required" />
-  <story id="STORY-013" status="pending" complexity="M" tdd="recommended" />
+  <story id="STORY-013" status="in_progress" complexity="M" tdd="recommended" />
 </phase>
 
 <phase id="4" name="Production" story_file="docs/stories/phase-4-production.md">

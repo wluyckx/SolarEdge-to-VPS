@@ -324,7 +324,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-006" status="pending" complexity="M" tdd="required">
+<story id="STORY-006" status="in_progress" complexity="M" tdd="required">
   <title>HTTPS batch uploader</title>
   <dependencies>STORY-005</dependencies>
 
