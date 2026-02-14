@@ -6,6 +6,7 @@ Environment variables are loaded at startup for validation. DEVICE_TOKENS
 are parsed into a BearerAuth instance stored on app.state for route handlers.
 
 CHANGELOG:
+- 2026-02-14: Register health router (STORY-015)
 - 2026-02-14: Register series router (STORY-012)
 - 2026-02-14: Register realtime router (STORY-011)
 - 2026-02-14: Register ingest router (STORY-010)
@@ -20,6 +21,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.api.health import router as health_router
 from src.api.ingest import router as ingest_router
 from src.api.realtime import router as realtime_router
 from src.api.series import router as series_router
@@ -99,6 +101,7 @@ app = FastAPI(
 )
 
 
+app.include_router(health_router)
 app.include_router(ingest_router)
 app.include_router(realtime_router)
 app.include_router(series_router)

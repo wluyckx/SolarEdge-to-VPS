@@ -9,9 +9,6 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ---------- runtime stage ----------
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Copy installed packages from builder
@@ -19,11 +16,9 @@ COPY --from=builder /install /usr/local
 
 COPY src/ src/
 
-EXPOSE 8000
-
 STOPSIGNAL SIGTERM
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
+    CMD test -f /data/health.json || exit 1
 
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "edge.src.main"]

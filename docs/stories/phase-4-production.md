@@ -1,8 +1,8 @@
 # Phase 4: Production
 
-**Status**: Not Started
+**Status**: Done
 **Stories**: 3
-**Completed**: 0
+**Completed**: 3
 **Depends On**: Phase 1 (edge components), Phase 2 (VPS components)
 
 ---
@@ -10,19 +10,19 @@
 ## Phase Completion Criteria
 
 This phase is complete when:
-- [ ] All stories have status "done"
-- [ ] All tests passing (`pytest edge/tests/ vps/tests/`)
-- [ ] Lint clean (`ruff check edge/src/ vps/src/`)
-- [ ] Edge daemon runs end-to-end: poll → normalize → spool → upload
-- [ ] VPS runs end-to-end: ingest → store → serve
-- [ ] Docker builds succeed for both edge and VPS
-- [ ] Health checks operational
+- [x] All stories have status "done"
+- [x] All tests passing (`pytest edge/tests/ vps/tests/`)
+- [x] Lint clean (`ruff check edge/src/ vps/src/`)
+- [x] Edge daemon runs end-to-end: poll → normalize → spool → upload
+- [x] VPS runs end-to-end: ingest → store → serve
+- [x] Docker builds succeed for both edge and VPS
+- [x] Health checks operational
 
 ---
 
 ## Stories
 
-<story id="STORY-014" status="pending" complexity="L" tdd="required">
+<story id="STORY-014" status="done" complexity="L" tdd="required">
   <title>Edge main loop</title>
   <dependencies>STORY-003, STORY-004, STORY-005, STORY-006</dependencies>
 
@@ -82,7 +82,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-015" status="pending" complexity="S" tdd="recommended">
+<story id="STORY-015" status="done" complexity="S" tdd="recommended">
   <title>Health checks</title>
   <dependencies>STORY-007, STORY-014</dependencies>
 
@@ -131,7 +131,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-016" status="pending" complexity="M" tdd="recommended">
+<story id="STORY-016" status="done" complexity="M" tdd="recommended">
   <title>Production hardening</title>
   <dependencies>STORY-015</dependencies>
 
