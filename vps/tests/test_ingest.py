@@ -378,6 +378,20 @@ class TestIngestBatchSizeCap:
 class TestIngestRequestBodyCap:
     """Tests for MAX_REQUEST_BYTES limit (AC9)."""
 
+    def test_malformed_content_length_returns_400(self, client: TestClient) -> None:
+        """Non-numeric Content-Length returns 400, not 500."""
+        response = client.post(
+            INGEST_URL,
+            content=b'{"samples": []}',
+            headers={
+                **AUTH_HEADER,
+                "Content-Type": "application/json",
+                "Content-Length": "not-a-number",
+            },
+        )
+        assert response.status_code == 400
+        assert "content-length" in response.json()["detail"].lower()
+
     def test_request_body_exceeding_max_bytes_returns_413(
         self,
         monkeypatch: pytest.MonkeyPatch,
