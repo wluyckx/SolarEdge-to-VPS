@@ -19,7 +19,7 @@ This phase is complete when:
 
 ## Stories
 
-<story id="STORY-007" status="pending" complexity="M" tdd="recommended">
+<story id="STORY-007" status="done" complexity="M" tdd="recommended">
   <title>VPS scaffolding and configuration</title>
   <dependencies>None</dependencies>
 

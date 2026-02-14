@@ -1,0 +1,16 @@
+[project]
+name = "sungrow-vps"
+version = "0.1.0"
+description = "VPS API for Sungrow-to-VPS solar telemetry"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["..", "."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]

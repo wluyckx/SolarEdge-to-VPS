@@ -20,7 +20,7 @@ This phase is complete when:
 
 ## Stories
 
-<story id="STORY-001" status="pending" complexity="M" tdd="recommended">
+<story id="STORY-001" status="done" complexity="M" tdd="recommended">
   <title>Edge scaffolding and configuration</title>
   <dependencies>None</dependencies>
 
