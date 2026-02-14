@@ -65,7 +65,7 @@ This phase is complete when:
 
   <notes>
     - Follow P1-Edge-VPS vps/ structure
-    - Docker images: timescale/timescaledb:latest-pg16, redis:7-alpine, caddy:2
+    - Docker images: timescale/timescaledb:2.14-pg16, redis:7-alpine, caddy:2
     - Database name: sungrow (different from P1's db)
     - Bind postgres to 127.0.0.1 only
   </notes>
