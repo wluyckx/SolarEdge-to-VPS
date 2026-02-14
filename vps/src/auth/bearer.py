@@ -14,11 +14,20 @@ TODO:
 
 import logging
 import secrets
+from hashlib import sha256
 
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
+
+
+def _masked_token(value: str | None) -> str:
+    """Return a short non-reversible token fingerprint for diagnostics."""
+    if not value:
+        return "empty"
+    digest = sha256(value.encode("utf-8")).hexdigest()[:10]
+    return f"len={len(value)} sha256={digest}"
 
 
 def parse_device_tokens(raw: str) -> dict[str, str]:
@@ -105,6 +114,10 @@ class BearerAuth:
         """
         self.token_map = token_map
         self.scheme = HTTPBearer(auto_error=False)
+        logger.info(
+            "Auth token fingerprints loaded: %s",
+            [_masked_token(token) for token in token_map],
+        )
 
     async def verify(
         self,
@@ -136,6 +149,11 @@ class BearerAuth:
         device_id = verify_bearer_token(credentials.credentials, self.token_map)
 
         if device_id is None:
+            logger.warning(
+                "Bearer auth failed. received=%s configured=%s",
+                _masked_token(credentials.credentials),
+                [_masked_token(token) for token in self.token_map],
+            )
             raise HTTPException(
                 status_code=401,
                 detail="Invalid or expired token.",
