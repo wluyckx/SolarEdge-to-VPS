@@ -6,6 +6,7 @@ All configuration values come from environment variables or .env files;
 no hardcoded IPs, URLs, or credentials.
 
 CHANGELOG:
+- 2026-02-14: Add raw debug snapshot configuration for Modbus payload inspection
 - 2026-02-14: Initial creation (STORY-001)
 
 TODO:
@@ -36,6 +37,8 @@ class EdgeSettings(BaseSettings):
         batch_size: Max samples per upload batch.
         upload_interval_s: Seconds between upload attempts.
         spool_path: SQLite spool file path for local buffering.
+        raw_debug_enabled: If True, logs periodic raw register snapshots.
+        raw_debug_every_n_polls: Snapshot frequency (every N poll attempts).
     """
 
     sungrow_host: str
@@ -49,6 +52,8 @@ class EdgeSettings(BaseSettings):
     batch_size: int = 30
     upload_interval_s: int = 10
     spool_path: str = "/data/spool.db"
+    raw_debug_enabled: bool = False
+    raw_debug_every_n_polls: int = 60
 
     @model_validator(mode="after")
     def _default_device_id(self) -> "EdgeSettings":
@@ -113,6 +118,14 @@ class EdgeSettings(BaseSettings):
         """Validate inter-register delay is non-negative."""
         if v < 0:
             raise ValueError("INTER_REGISTER_DELAY_MS must be >= 0")
+        return v
+
+    @field_validator("raw_debug_every_n_polls")
+    @classmethod
+    def raw_debug_every_n_polls_must_be_positive(cls, v: int) -> int:
+        """Validate raw snapshot interval is positive."""
+        if v < 1:
+            raise ValueError("RAW_DEBUG_EVERY_N_POLLS must be >= 1")
         return v
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

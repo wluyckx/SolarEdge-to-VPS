@@ -17,6 +17,7 @@ tracks last_poll_ts, last_upload_ts, and spool_count, writing a JSON health
 file after each state change.
 
 CHANGELOG:
+- 2026-02-14: Add periodic raw register snapshot logging for field diagnostics
 - 2026-02-14: Replace inline health writer with HealthWriter (STORY-015)
 - 2026-02-14: Initial creation (STORY-014)
 
@@ -98,7 +99,8 @@ def log_config_summary(settings: object) -> None:
         "sungrow_host=%s, sungrow_port=%s, sungrow_slave_id=%s, "
         "poll_interval_s=%s, upload_interval_s=%s, "
         "inter_register_delay_ms=%s, batch_size=%s, "
-        "spool_path=%s, device_id=%s, vps_base_url=%s",
+        "spool_path=%s, device_id=%s, vps_base_url=%s, "
+        "raw_debug_enabled=%s, raw_debug_every_n_polls=%s",
         settings.sungrow_host,  # type: ignore[union-attr]
         settings.sungrow_port,  # type: ignore[union-attr]
         settings.sungrow_slave_id,  # type: ignore[union-attr]
@@ -109,7 +111,25 @@ def log_config_summary(settings: object) -> None:
         settings.spool_path,  # type: ignore[union-attr]
         settings.device_id,  # type: ignore[union-attr]
         settings.vps_base_url,  # type: ignore[union-attr]
+        settings.raw_debug_enabled,  # type: ignore[union-attr]
+        settings.raw_debug_every_n_polls,  # type: ignore[union-attr]
     )
+
+
+def _log_raw_snapshot(raw: dict[str, list[int]]) -> None:
+    """Log a compact raw register snapshot for debugging field decoding."""
+    keys = (
+        "total_dc_power",
+        "daily_pv_generation",
+        "battery_power",
+        "battery_soc",
+        "battery_temperature",
+        "load_power",
+        "grid_power",
+        "export_power",
+    )
+    snapshot = {k: raw.get(k) for k in keys if k in raw}
+    logger.warning("Raw register snapshot: %s", snapshot)
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +143,9 @@ async def _poll_once(
     spool: Spool,
     device_id: str,
     health: HealthWriter | None,
+    raw_debug_enabled: bool = False,
+    raw_debug_every_n_polls: int = 60,
+    raw_debug_state: list[int] | None = None,
 ) -> None:
     """Execute a single poll-normalize-enqueue cycle.
 
@@ -140,6 +163,11 @@ async def _poll_once(
         raw = await poller.poll()
 
         if raw is not None:
+            if raw_debug_enabled and raw_debug_state is not None:
+                raw_debug_state[0] += 1
+                if raw_debug_state[0] % raw_debug_every_n_polls == 0:
+                    _log_raw_snapshot(raw)
+
             ts = datetime.now(tz=UTC)
             sample = normalize(raw, device_id=device_id, ts=ts)
 
@@ -209,6 +237,8 @@ async def _poll_loop(
     poll_interval_s: float,
     shutdown_event: asyncio.Event,
     health: HealthWriter | None,
+    raw_debug_enabled: bool = False,
+    raw_debug_every_n_polls: int = 60,
 ) -> None:
     """Run the poll loop until shutdown_event is set.
 
@@ -224,12 +254,16 @@ async def _poll_loop(
         health: HealthWriter instance, or None to skip health writes.
     """
     logger.info("Poll loop started (interval=%ss)", poll_interval_s)
+    raw_debug_state = [0]
     while not shutdown_event.is_set():
         await _poll_once(
             poller=poller,
             spool=spool,
             device_id=device_id,
             health=health,
+            raw_debug_enabled=raw_debug_enabled,
+            raw_debug_every_n_polls=raw_debug_every_n_polls,
+            raw_debug_state=raw_debug_state,
         )
         # Use wait with timeout so we can check shutdown between sleeps
         with contextlib.suppress(TimeoutError):
@@ -287,6 +321,8 @@ async def run_loops(
     upload_interval_s: float,
     shutdown_event: asyncio.Event,
     health: HealthWriter | None = None,
+    raw_debug_enabled: bool = False,
+    raw_debug_every_n_polls: int = 60,
 ) -> None:
     """Run poll and upload loops concurrently until shutdown.
 
@@ -314,6 +350,8 @@ async def run_loops(
             poll_interval_s=poll_interval_s,
             shutdown_event=shutdown_event,
             health=health,
+            raw_debug_enabled=raw_debug_enabled,
+            raw_debug_every_n_polls=raw_debug_every_n_polls,
         ),
         _upload_loop(
             uploader=uploader,
@@ -384,6 +422,8 @@ async def async_main() -> None:
             upload_interval_s=settings.upload_interval_s,
             shutdown_event=shutdown_event,
             health=health,
+            raw_debug_enabled=settings.raw_debug_enabled,
+            raw_debug_every_n_polls=settings.raw_debug_every_n_polls,
         )
 
 

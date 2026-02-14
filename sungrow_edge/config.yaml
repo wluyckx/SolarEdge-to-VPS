@@ -1,5 +1,5 @@
 name: Sungrow Edge Daemon
-version: "0.1.4"
+version: "0.1.5"
 slug: sungrow_edge
 description: Poll Sungrow inverter via Modbus and upload telemetry to VPS
 url: https://github.com/Wim/SolarEdge-to-VPS
@@ -24,6 +24,8 @@ options:
   batch_size: 30
   upload_interval_s: 10
   spool_path: "/data/spool.db"
+  raw_debug_enabled: false
+  raw_debug_every_n_polls: 10
 schema:
   sungrow_host: str
   vps_base_url: str
@@ -36,3 +38,5 @@ schema:
   batch_size: int
   upload_interval_s: int
   spool_path: str
+  raw_debug_enabled: bool
+  raw_debug_every_n_polls: int(1,)
