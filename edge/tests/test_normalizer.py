@@ -248,6 +248,13 @@ class TestS32Signed:
         assert result is not None
         assert result.export_power_w == 1500.0
 
+    def test_load_power_legacy_low_word_s16_fallback(self) -> None:
+        """[0x0000, 0xF230] falls back to low-word S16 => -3536."""
+        raw = _make_raw(load_power=[0x0000, 0xF230])
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.load_power_w == -3536.0
+
 
 # ===========================================================================
 # AC2: Scaling factors

@@ -13,6 +13,7 @@ This is a pure function: no side effects, no I/O, no clock.  The device_id
 and timestamp are accepted as parameters so they can be injected by the caller.
 
 CHANGELOG:
+- 2026-02-14: Add S32 fallback decoder for devices exposing legacy S16 in low word
 - 2026-02-14: Fallback export_power_w to -grid_power when export register is missing
 - 2026-02-14: Fix contract to accept poller's dict[str, list[int]] format
 - 2026-02-14: Initial creation (STORY-004)
@@ -144,6 +145,23 @@ def _extract_value(
     if reg_def.valid_range is not None:
         lo, hi = reg_def.valid_range
         if not (lo <= scaled <= hi):
+            # Some inverter firmwares expose S16 values in the low word while
+            # still returning 2 words for documented S32 registers.
+            # Example observed on load_power: [0, 62000].
+            if reg_type == "S32" and len(words) >= 2 and words[0] in (0, 0xFFFF):
+                alt_raw_int = _convert_s16(words[1])
+                alt_scaled = alt_raw_int * reg_def.scale
+                if lo <= alt_scaled <= hi:
+                    logger.warning(
+                        "Register '%s': S32 out-of-range %.4g from words=%s; "
+                        "using legacy low-word S16 fallback %.4g",
+                        name,
+                        scaled,
+                        words,
+                        alt_scaled,
+                    )
+                    return alt_scaled
+
             logger.warning(
                 "Register '%s': scaled value %.4g "
                 "(raw words=%s) outside valid range (%s, %s)",
