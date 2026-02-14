@@ -430,10 +430,9 @@ class TestConcurrency:
                 return await spool.peek(20)
 
             await asyncio.gather(do_enqueue(), do_peek())
-            # After all operations, count should be between 5 and 10
-            # (depending on timing).
+            # All 5 seeded + 5 enqueued = 10, no deletes occurred.
             final_count = await spool.count()
-            assert 5 <= final_count <= 10
+            assert final_count == 10
 
 
 # ---------------------------------------------------------------------------

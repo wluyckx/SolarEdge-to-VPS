@@ -2,9 +2,11 @@
 FastAPI application entry point for the Sungrow-to-VPS API.
 
 Provides the root health endpoint and serves as the application factory.
-Environment variables are loaded at startup for validation.
+Environment variables are loaded at startup for validation. DEVICE_TOKENS
+are parsed into a BearerAuth instance stored on app.state for route handlers.
 
 CHANGELOG:
+- 2026-02-14: Wire DEVICE_TOKENS parsing into startup (STORY-009 AC1 fix)
 - 2026-02-14: Initial creation (STORY-007)
 """
 
@@ -14,6 +16,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+from src.auth.bearer import BearerAuth, parse_device_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     config = _load_env_config()
     app.state.config = config
+
+    # AC1: Parse DEVICE_TOKENS into token->device_id map and build BearerAuth
+    token_map = parse_device_tokens(config["DEVICE_TOKENS"])
+    if not token_map:
+        raise RuntimeError(
+            "DEVICE_TOKENS parsed but contains no valid token:device_id entries"
+        )
+    app.state.auth = BearerAuth(token_map)
+    logger.info("Parsed %d device token(s) from DEVICE_TOKENS", len(token_map))
+
     logger.info("Environment validated, Sungrow VPS API ready")
     yield
     logger.info("Sungrow VPS API shutting down")

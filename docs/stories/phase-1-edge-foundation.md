@@ -138,7 +138,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-003" status="pending" complexity="L" tdd="required">
+<story id="STORY-003" status="in_progress" complexity="L" tdd="required">
   <title>Modbus TCP poller</title>
   <dependencies>STORY-002</dependencies>
 
@@ -200,7 +200,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-004" status="pending" complexity="M" tdd="required">
+<story id="STORY-004" status="in_progress" complexity="M" tdd="required">
   <title>Register normalizer</title>
   <dependencies>STORY-002</dependencies>
 

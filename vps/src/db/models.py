@@ -35,7 +35,8 @@ class SungrowSample(Base):
         ts: Measurement timestamp in UTC.
         pv_power_w: Current PV production power in watts.
         pv_daily_kwh: Cumulative daily PV energy in kWh (nullable).
-        battery_power_w: Battery power in watts (negative = charging).
+        battery_power_w: Battery power in watts.
+            Positive = charging, negative = discharging.
         battery_soc_pct: Battery state of charge in percent (0-100).
         battery_temp_c: Battery temperature in Celsius (nullable).
         load_power_w: Household load power in watts.

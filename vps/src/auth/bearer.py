@@ -39,12 +39,13 @@ def parse_device_tokens(raw: str) -> dict[str, str]:
         return {}
 
     token_map: dict[str, str] = {}
-    for entry in raw.split(","):
+    for idx, entry in enumerate(raw.split(",")):
         entry = entry.strip()
         if ":" not in entry:
             logger.warning(
-                "Skipping malformed DEVICE_TOKENS entry (no colon): %r",
-                entry,
+                "Skipping malformed DEVICE_TOKENS entry at position %d"
+                " (no colon separator)",
+                idx,
             )
             continue
         token, device_id = entry.split(":", maxsplit=1)
