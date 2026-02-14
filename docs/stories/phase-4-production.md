@@ -90,7 +90,7 @@ This phase is complete when:
     Health monitoring for both edge and VPS components.
 
     Edge: Write a JSON health file at /data/health.json on each poll loop iteration,
-    containing last_poll_ts, last_upload_ts, spool_count, and uptime.
+    containing last_poll_ts, last_upload_ts, and spool_count.
 
     VPS: GET /health endpoint returning service status (no auth required).
 
