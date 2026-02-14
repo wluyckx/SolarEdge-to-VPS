@@ -112,12 +112,15 @@ async def realtime(
     if device_id != auth_device_id:
         raise HTTPException(
             status_code=403,
-            detail=f"Query device_id '{device_id}' does not match "
-            f"authenticated device_id '{auth_device_id}'.",
+            detail="Device ID does not match authenticated device.",
         )
 
     config = request.app.state.config
-    cache_ttl = int(config.get("CACHE_TTL_S", "5"))
+    try:
+        cache_ttl = int(config.get("CACHE_TTL_S", "5"))
+    except ValueError:
+        logger.warning("Invalid CACHE_TTL_S value, using default 5s")
+        cache_ttl = 5
     cache_key = f"realtime:{device_id}"
 
     # AC4: Try Redis cache first (best-effort)

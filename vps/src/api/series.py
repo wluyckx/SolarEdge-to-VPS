@@ -140,8 +140,7 @@ async def get_series(
     if device_id != auth_device_id:
         raise HTTPException(
             status_code=403,
-            detail=f"Query device_id '{device_id}' does not match "
-            f"authenticated device_id '{auth_device_id}'.",
+            detail="Device ID does not match authenticated device.",
         )
 
     # Query the aggregation service

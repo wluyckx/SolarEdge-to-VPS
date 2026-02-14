@@ -83,25 +83,63 @@ async def query_series(
     """
     config = FRAME_CONFIG[frame]
 
+    # Try continuous aggregate view first; fall back to raw table with
+    # time_bucket() if the view does not exist (e.g. fresh dev environment).
+    try:
+        return await _query_view(db, device_id, config)
+    except Exception:
+        logger.warning(
+            "View '%s' query failed, falling back to raw table with time_bucket('%s')",
+            config.source_view,
+            config.bucket_interval,
+        )
+        return await _query_raw_fallback(db, device_id, config)
+
+
+async def _query_view(
+    db: AsyncSession,
+    device_id: str,
+    config: FrameConfig,
+) -> list[dict]:
+    """Query a continuous aggregate view directly."""
     sql = (
-        f"SELECT bucket, avg_pv_power_w, max_pv_power_w, avg_battery_power_w, "
-        f"avg_battery_soc_pct, avg_load_power_w, avg_export_power_w, sample_count "
+        f"SELECT bucket, avg_pv_power_w, max_pv_power_w, "
+        f"avg_battery_power_w, avg_battery_soc_pct, avg_load_power_w, "
+        f"avg_export_power_w, sample_count "
         f"FROM {config.source_view} "
         f"WHERE device_id = :device_id"
     )
-
     if config.time_filter:
         sql += f" AND {config.time_filter}"
-
     sql += " ORDER BY bucket ASC"
 
-    logger.debug(
-        "Querying series: frame=%s view=%s device_id=%s",
-        frame,
-        config.source_view,
-        device_id,
+    result = await db.execute(text(sql), {"device_id": device_id})
+    return [dict(row) for row in result.mappings().all()]
+
+
+async def _query_raw_fallback(
+    db: AsyncSession,
+    device_id: str,
+    config: FrameConfig,
+) -> list[dict]:
+    """Fall back to raw sungrow_samples table with time_bucket()."""
+    sql = (
+        f"SELECT time_bucket('{config.bucket_interval}', ts) AS bucket, "
+        f"AVG(pv_power_w) AS avg_pv_power_w, "
+        f"MAX(pv_power_w) AS max_pv_power_w, "
+        f"AVG(battery_power_w) AS avg_battery_power_w, "
+        f"AVG(battery_soc_pct) AS avg_battery_soc_pct, "
+        f"AVG(load_power_w) AS avg_load_power_w, "
+        f"AVG(export_power_w) AS avg_export_power_w, "
+        f"COUNT(*) AS sample_count "
+        f"FROM sungrow_samples "
+        f"WHERE device_id = :device_id"
     )
+    if config.time_filter:
+        # Replace 'bucket' references with 'ts' for the raw table
+        time_filter = config.time_filter.replace("bucket", "ts")
+        sql += f" AND {time_filter}"
+    sql += " GROUP BY device_id, bucket ORDER BY bucket ASC"
 
     result = await db.execute(text(sql), {"device_id": device_id})
-    rows = result.mappings().all()
-    return [dict(row) for row in rows]
+    return [dict(row) for row in result.mappings().all()]

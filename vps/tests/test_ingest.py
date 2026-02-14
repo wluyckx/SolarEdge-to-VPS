@@ -155,7 +155,7 @@ class TestIngestDeviceIdMismatch:
         }
         response = client.post(INGEST_URL, json=payload, headers=AUTH_HEADER)
         assert response.status_code == 403
-        assert "device_id" in response.json()["detail"].lower()
+        assert "device" in response.json()["detail"].lower()
 
     def test_mixed_device_ids_returns_403(self, client: TestClient) -> None:
         """AC2: Mix of matching and non-matching device_ids returns 403."""

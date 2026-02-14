@@ -397,7 +397,7 @@ class TestSeriesAuth:
             headers=AUTH_HEADER,
         )
         assert response.status_code == 403
-        assert "device_id" in response.json()["detail"].lower()
+        assert "device" in response.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------

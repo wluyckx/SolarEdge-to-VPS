@@ -159,8 +159,7 @@ async def ingest(
         if sample.device_id != device_id:
             raise HTTPException(
                 status_code=403,
-                detail=f"Sample device_id '{sample.device_id}' does not match "
-                f"authenticated device_id '{device_id}'.",
+                detail="Sample device ID does not match authenticated device.",
             )
 
     # Convert to dicts for bulk insert
