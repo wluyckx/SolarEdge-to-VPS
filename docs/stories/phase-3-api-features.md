@@ -1,8 +1,8 @@
 # Phase 3: API Features
 
-**Status**: Not Started
+**Status**: Done
 **Stories**: 3
-**Completed**: 0
+**Completed**: 3
 **Depends On**: Phase 2 (STORY-010 ingest endpoint must exist)
 
 ---
@@ -19,7 +19,7 @@ This phase is complete when:
 
 ## Stories
 
-<story id="STORY-011" status="pending" complexity="M" tdd="required">
+<story id="STORY-011" status="done" complexity="M" tdd="required">
   <title>Realtime endpoint</title>
   <dependencies>STORY-010</dependencies>
 
@@ -71,7 +71,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-012" status="pending" complexity="L" tdd="required">
+<story id="STORY-012" status="done" complexity="L" tdd="required">
   <title>Series endpoint (historical rollups)</title>
   <dependencies>STORY-010</dependencies>
 

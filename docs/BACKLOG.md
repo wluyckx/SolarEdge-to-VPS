@@ -4,8 +4,8 @@
   <project>Sungrow-to-VPS Pipeline</project>
   <last_updated>2026-02-14</last_updated>
   <total_stories>16</total_stories>
-  <done>11</done>
-  <progress>69%</progress>
+  <done>13</done>
+  <progress>81%</progress>
   <changelog>
     <entry date="2026-02-14">Doc harmonization: BACKLOG.md is now summary-only; phase story files are single source of truth for AC, allowed scope, test plans</entry>
     <entry date="2026-02-14">Initial backlog creation (16 stories across 4 phases)</entry>
@@ -169,8 +169,8 @@
 </phase>
 
 <phase id="3" name="API Features" story_file="docs/stories/phase-3-api-features.md">
-  <story id="STORY-011" status="pending" complexity="M" tdd="required" />
-  <story id="STORY-012" status="pending" complexity="L" tdd="required" />
+  <story id="STORY-011" status="done" complexity="M" tdd="required" />
+  <story id="STORY-012" status="done" complexity="L" tdd="required" />
   <story id="STORY-013" status="done" complexity="M" tdd="recommended" />
 </phase>
 
@@ -188,10 +188,10 @@
   <phase_summary>
     <phase id="1" name="Edge Foundation" stories="6" done="6" progress="100%" link="stories/phase-1-edge-foundation.md" />
     <phase id="2" name="VPS Ingestion" stories="4" done="4" progress="100%" link="stories/phase-2-vps-ingestion.md" />
-    <phase id="3" name="API Features" stories="3" done="1" progress="33%" link="stories/phase-3-api-features.md" />
+    <phase id="3" name="API Features" stories="3" done="3" progress="100%" link="stories/phase-3-api-features.md" />
     <phase id="4" name="Production" stories="3" done="0" progress="0%" link="stories/phase-4-production.md" />
   </phase_summary>
-  <total stories="16" done="11" progress="69%" />
+  <total stories="16" done="13" progress="81%" />
 </progress>
 
 <!-- ============================================================ -->
