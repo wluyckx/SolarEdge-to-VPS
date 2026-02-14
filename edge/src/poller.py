@@ -11,6 +11,7 @@ register values as a dict.  Designed to be robust:
 - Logs warnings on errors but never propagates exceptions to the caller.
 
 CHANGELOG:
+- 2026-02-14: Allow polling to continue when optional export group is unsupported
 - 2026-02-14: Initial creation (STORY-003)
 
 TODO:
@@ -231,6 +232,15 @@ async def _do_poll(
         )
 
         if response.isError():
+            if group.group_name == "export":
+                logger.warning(
+                    "Modbus error reading optional group '%s' "
+                    "(address=%d, count=%d), continuing without export register",
+                    group.group_name,
+                    group.start_address,
+                    group.count,
+                )
+                continue
             logger.warning(
                 "Modbus error reading group '%s' (address=%d, count=%d)",
                 group.group_name,

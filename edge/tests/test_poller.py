@@ -353,6 +353,25 @@ class TestPollerReturnValues:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_export_group_error_returns_partial_result(self) -> None:
+        """An export-group error is tolerated; other groups are still returned."""
+        from edge.src.poller import poll_registers
+
+        mock_client = _make_mock_client(error_groups={"export"})
+        with patch("edge.src.poller.AsyncModbusTcpClient", return_value=mock_client):
+            result = await poll_registers(
+                host="192.168.1.100",
+                port=502,
+                slave_id=1,
+                inter_register_delay_ms=0,
+            )
+
+        assert result is not None
+        assert "load_power" in result
+        assert "battery_power" in result
+        assert "export_power" not in result
+
+    @pytest.mark.asyncio
     async def test_connection_failure_returns_none(self) -> None:
         """If connect() returns False, poll returns None."""
         from edge.src.poller import poll_registers

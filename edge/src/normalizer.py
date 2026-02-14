@@ -13,6 +13,7 @@ This is a pure function: no side effects, no I/O, no clock.  The device_id
 and timestamp are accepted as parameters so they can be injected by the caller.
 
 CHANGELOG:
+- 2026-02-14: Fallback export_power_w to -grid_power when export register is missing
 - 2026-02-14: Fix contract to accept poller's dict[str, list[int]] format
 - 2026-02-14: Initial creation (STORY-004)
 
@@ -192,6 +193,21 @@ def normalize(
         if reg_def is None:
             logger.warning("Register '%s' not found in ALL_REGISTERS", reg_name)
             return None
+
+        # Some inverters do not expose export_power (register 5083).
+        # Use grid_power fallback (positive import / negative export), so
+        # export_power_w = -grid_power.
+        if field_name == "export_power_w" and reg_name not in raw:
+            grid_reg = ALL_REGISTERS.get("grid_power")
+            if grid_reg is not None:
+                grid_value = _extract_value(grid_reg, raw)
+                if grid_value is not None:
+                    fields[field_name] = -grid_value
+                    logger.warning(
+                        "Register '%s' missing; falling back to -grid_power",
+                        reg_name,
+                    )
+                    continue
 
         value = _extract_value(reg_def, raw)
         if value is None:

@@ -58,6 +58,8 @@ def _make_raw(**overrides: list[int]) -> dict[str, list[int]]:
         "battery_temperature": [250],
         # S32: [hi, lo] -> 2000 W
         "load_power": [0, 2000],
+        # S16: [0xFE3E] -> -450 W (import/export sign per register definition)
+        "grid_power": [0xFE3E],
         # S32: [hi, lo] -> 500 W
         "export_power": [0, 500],
     }
@@ -314,7 +316,8 @@ class TestMissingRegister:
         raw = _make_raw()
         del raw["export_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
-        assert result is None
+        assert result is not None
+        assert result.export_power_w == pytest.approx(450.0)
 
     def test_empty_dict_returns_none(self) -> None:
         result = normalize({}, device_id=_DEVICE_ID, ts=_TS)
