@@ -19,6 +19,10 @@ COPY --from=builder /install /usr/local
 
 COPY src/ src/
 
+# Run as non-root user
+RUN useradd --create-home --no-log-init appuser
+USER appuser
+
 EXPOSE 8000
 
 STOPSIGNAL SIGTERM

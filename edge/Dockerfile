@@ -23,6 +23,10 @@ RUN touch edge/__init__.py
 # Provision health-file directory (AC6 / STORY-015)
 RUN mkdir -p /data
 
+# Run as non-root user
+RUN useradd --create-home --no-log-init appuser && chown -R appuser /data
+USER appuser
+
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \

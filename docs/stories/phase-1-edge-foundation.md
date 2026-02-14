@@ -10,11 +10,11 @@
 ## Phase Completion Criteria
 
 This phase is complete when:
-- [ ] All stories have status "done"
-- [ ] All tests passing (`pytest edge/tests/`)
-- [ ] Lint clean (`ruff check edge/src/`)
-- [ ] Documentation updated
-- [ ] Edge daemon can poll Sungrow, normalize, spool, and upload to VPS
+- [x] All stories have status "done"
+- [x] All tests passing (`pytest edge/tests/`)
+- [x] Lint clean (`ruff check edge/src/`)
+- [x] Documentation updated
+- [x] Edge daemon can poll Sungrow, normalize, spool, and upload to VPS
 
 ---
 

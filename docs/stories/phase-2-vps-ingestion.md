@@ -10,10 +10,10 @@
 ## Phase Completion Criteria
 
 This phase is complete when:
-- [ ] All stories have status "done"
-- [ ] All tests passing (`pytest vps/tests/`)
-- [ ] Lint clean (`ruff check vps/src/`)
-- [ ] VPS accepts Sungrow sample batches via HTTPS and stores in TimescaleDB
+- [x] All stories have status "done"
+- [x] All tests passing (`pytest vps/tests/`)
+- [x] Lint clean (`ruff check vps/src/`)
+- [x] VPS accepts Sungrow sample batches via HTTPS and stores in TimescaleDB
 
 ---
 
