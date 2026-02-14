@@ -136,6 +136,10 @@ async def ingest(
     try:
         payload = IngestPayload.model_validate_json(body)
     except ValidationError as exc:
+        logger.warning(
+            "Invalid ingest payload: %s",
+            exc.errors(include_input=False),
+        )
         return JSONResponse(
             status_code=422,
             # Avoid embedding raw input bytes in error payload (not JSON serializable).
