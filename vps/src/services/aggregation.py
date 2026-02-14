@@ -86,11 +86,16 @@ async def query_series(
 
     # Try continuous aggregate view first; fall back to raw table with
     # time_bucket() if the view does not exist (e.g. fresh dev environment).
-    # Only catch ProgrammingError (undefined table/view) — other DB errors
-    # should propagate to expose real issues.
+    # Only catch ProgrammingError for "undefined table" (SQLSTATE 42P01) —
+    # other ProgrammingErrors (syntax, permissions) should propagate.
     try:
         return await _query_view(db, device_id, config)
-    except ProgrammingError:
+    except ProgrammingError as exc:
+        pgcode = getattr(exc.orig, "pgcode", None) or getattr(
+            exc.orig, "sqlstate", None
+        )
+        if pgcode != "42P01":
+            raise
         logger.warning(
             "View '%s' not available, falling back to raw table with time_bucket('%s')",
             config.source_view,

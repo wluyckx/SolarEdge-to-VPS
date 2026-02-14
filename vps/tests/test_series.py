@@ -571,14 +571,17 @@ class TestAggregationService:
         mock_session = AsyncMock()
         mock_session.rollback = AsyncMock()
 
-        # First call (view) raises ProgrammingError, second (fallback) succeeds
+        # First call (view) raises ProgrammingError with 42P01,
+        # second call (fallback) succeeds
         fallback_result = MagicMock()
         fallback_result.mappings.return_value.all.return_value = [
             _make_bucket_row(),
         ]
+        orig = Exception("relation does not exist")
+        orig.pgcode = "42P01"
         mock_session.execute = AsyncMock(
             side_effect=[
-                ProgrammingError("", {}, Exception("relation does not exist")),
+                ProgrammingError("", {}, orig),
                 fallback_result,
             ]
         )
@@ -607,9 +610,11 @@ class TestAggregationService:
 
         fallback_result = MagicMock()
         fallback_result.mappings.return_value.all.return_value = []
+        orig = Exception()
+        orig.pgcode = "42P01"
         mock_session.execute = AsyncMock(
             side_effect=[
-                ProgrammingError("", {}, Exception()),
+                ProgrammingError("", {}, orig),
                 fallback_result,
             ]
         )
@@ -618,6 +623,23 @@ class TestAggregationService:
         fallback_sql = str(mock_session.execute.call_args_list[1][0][0])
         assert "SUM(sample_count)" in fallback_sql
         assert "COUNT(*)" not in fallback_sql
+
+    @pytest.mark.asyncio
+    async def test_non_42p01_programming_error_propagates(self) -> None:
+        """ProgrammingError with non-42P01 code (e.g. syntax error) propagates."""
+        from sqlalchemy.exc import ProgrammingError
+
+        from src.services.aggregation import query_series
+
+        mock_session = AsyncMock()
+        orig = Exception("syntax error")
+        orig.pgcode = "42601"  # syntax_error, not undefined_table
+        mock_session.execute = AsyncMock(
+            side_effect=ProgrammingError("", {}, orig),
+        )
+
+        with pytest.raises(ProgrammingError):
+            await query_series(mock_session, DEVICE_ID, "day")
 
     @pytest.mark.asyncio
     async def test_non_programming_error_propagates(self) -> None:
