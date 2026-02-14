@@ -1,8 +1,8 @@
 # Phase 1: Edge Foundation
 
-**Status**: Not Started
+**Status**: In Progress
 **Stories**: 6
-**Completed**: 0
+**Completed**: 3
 **Depends On**: None
 
 ---
@@ -71,7 +71,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-002" status="pending" complexity="M" tdd="required">
+<story id="STORY-002" status="done" complexity="M" tdd="required">
   <title>Sungrow Modbus register map</title>
   <dependencies>STORY-001</dependencies>
 
@@ -265,7 +265,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-005" status="pending" complexity="M" tdd="required">
+<story id="STORY-005" status="done" complexity="M" tdd="required">
   <title>SQLite spool buffer</title>
   <dependencies>STORY-001</dependencies>
 

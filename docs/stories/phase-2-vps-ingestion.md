@@ -1,8 +1,8 @@
 # Phase 2: VPS Ingestion
 
-**Status**: Not Started
+**Status**: In Progress
 **Stories**: 4
-**Completed**: 0
+**Completed**: 3
 **Depends On**: None (can be developed in parallel with Phase 1)
 
 ---
@@ -73,7 +73,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-008" status="pending" complexity="L" tdd="required">
+<story id="STORY-008" status="done" complexity="L" tdd="required">
   <title>TimescaleDB schema and migrations</title>
   <dependencies>STORY-007</dependencies>
 
@@ -128,7 +128,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-009" status="pending" complexity="S" tdd="required">
+<story id="STORY-009" status="done" complexity="S" tdd="required">
   <title>Bearer token authentication</title>
   <dependencies>STORY-007</dependencies>
 
