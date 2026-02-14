@@ -28,12 +28,13 @@ _TS = datetime(2026, 2, 14, 12, 0, 0, tzinfo=UTC)
 _DEVICE_ID = "sungrow-test-001"
 
 
-def _make_raw(**overrides: int) -> dict[str, int]:
-    """Return a raw register dict with sensible defaults for all required fields.
+def _make_raw(**overrides: list[int]) -> dict[str, list[int]]:
+    """Return a raw register dict matching the poller's output format.
 
-    The defaults produce values that, after type conversion and scaling, are
-    within every register's valid_range. Individual tests override only the
-    register(s) under test.
+    Each value is a list of 16-bit words: 1-element for U16/S16,
+    2-element [hi, lo] for U32/S32. Defaults produce values that,
+    after type conversion and scaling, are within every register's
+    valid_range.
 
     Required SungrowSample fields and the registers that feed them:
         pv_power_w        <- total_dc_power      (U32, scale=1, W)
@@ -44,25 +45,21 @@ def _make_raw(**overrides: int) -> dict[str, int]:
         load_power_w      <- load_power            (S32, scale=1, W)
         export_power_w    <- export_power          (S32, scale=1, W)
     """
-    defaults: dict[str, int] = {
-        # U32: two registers -- high word then low word
-        # total_dc_power: raw 1000 -> 1000 W
-        "total_dc_power_hi": 0,
-        "total_dc_power_lo": 1000,
-        # U16: raw 50 * 0.1 = 5.0 kWh
-        "daily_pv_generation": 50,
-        # S16: raw 500 -> 500 W (charging)
-        "battery_power": 500,
-        # U16: raw 800 * 0.1 = 80.0 %
-        "battery_soc": 800,
-        # U16: raw 250 * 0.1 = 25.0 C
-        "battery_temperature": 250,
-        # S32: two registers -- raw 2000 -> 2000 W
-        "load_power_hi": 0,
-        "load_power_lo": 2000,
-        # S32: two registers -- raw 500 -> 500 W
-        "export_power_hi": 0,
-        "export_power_lo": 500,
+    defaults: dict[str, list[int]] = {
+        # U32: [hi_word, lo_word] -> (0 << 16) | 1000 = 1000 W
+        "total_dc_power": [0, 1000],
+        # U16: [50] * 0.1 = 5.0 kWh
+        "daily_pv_generation": [50],
+        # S16: [500] -> 500 W (charging)
+        "battery_power": [500],
+        # U16: [800] * 0.1 = 80.0 %
+        "battery_soc": [800],
+        # U16: [250] * 0.1 = 25.0 C
+        "battery_temperature": [250],
+        # S32: [hi, lo] -> 2000 W
+        "load_power": [0, 2000],
+        # S32: [hi, lo] -> 500 W
+        "export_power": [0, 500],
     }
     defaults.update(overrides)
     return defaults
@@ -176,14 +173,14 @@ class TestU32Assembly:
 
     def test_u32_assembly_in_sample(self) -> None:
         """[0x0000, 0x2710] -> 10000 W (in range for total_dc_power)."""
-        raw = _make_raw(total_dc_power_hi=0x0000, total_dc_power_lo=0x2710)
+        raw = _make_raw(total_dc_power=[0x0000, 0x2710])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.pv_power_w == 10000.0
 
     def test_u32_low_word_only(self) -> None:
         """[0x0000, 0x1234] -> 0x1234 = 4660."""
-        raw = _make_raw(total_dc_power_hi=0x0000, total_dc_power_lo=0x1234)
+        raw = _make_raw(total_dc_power=[0x0000, 0x1234])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         # valid_range for total_dc_power is (0, 20000); 4660 is in range
@@ -191,7 +188,7 @@ class TestU32Assembly:
 
     def test_u32_both_words(self) -> None:
         """[0x0000, 0x03E8] -> 1000."""
-        raw = _make_raw(total_dc_power_hi=0x0000, total_dc_power_lo=0x03E8)
+        raw = _make_raw(total_dc_power=[0x0000, 0x03E8])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.pv_power_w == 1000.0
@@ -207,23 +204,21 @@ class TestS16Signed:
 
     def test_s16_negative_ffff(self) -> None:
         """Register 0xFFFF -> -1 (two's complement)."""
-        raw = _make_raw(battery_power=0xFFFF)
+        raw = _make_raw(battery_power=[0xFFFF])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.battery_power_w == -1.0
 
     def test_s16_negative_large(self) -> None:
-        """Register 0x8000 -> -32768."""
-        # battery_power valid_range is (-10000, 10000), so -32768 is out of range
-        # Use a value that IS in range: 0xFC18 = -1000
-        raw = _make_raw(battery_power=0xFC18)
+        """Register 0xFC18 -> -1000 (two's complement, in range)."""
+        raw = _make_raw(battery_power=[0xFC18])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.battery_power_w == -1000.0
 
     def test_s16_positive(self) -> None:
         """Register 0x03E8 -> 1000 (positive stays positive)."""
-        raw = _make_raw(battery_power=0x03E8)
+        raw = _make_raw(battery_power=[0x03E8])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.battery_power_w == 1000.0
@@ -238,17 +233,15 @@ class TestS32Signed:
     """S32: signed 32-bit two's complement conversion."""
 
     def test_s32_negative(self) -> None:
-        """Two registers forming -500 in S32 two's complement."""
-        # -500 in 32-bit two's complement = 0xFFFFFE0C
-        # hi = 0xFFFF, lo = 0xFE0C
-        raw = _make_raw(export_power_hi=0xFFFF, export_power_lo=0xFE0C)
+        """[0xFFFF, 0xFE0C] -> -500 in S32 two's complement."""
+        raw = _make_raw(export_power=[0xFFFF, 0xFE0C])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.export_power_w == -500.0
 
     def test_s32_positive(self) -> None:
-        """Two registers forming +1500 in S32."""
-        raw = _make_raw(export_power_hi=0x0000, export_power_lo=1500)
+        """[0x0000, 1500] -> +1500 in S32."""
+        raw = _make_raw(export_power=[0x0000, 1500])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.export_power_w == 1500.0
@@ -263,48 +256,29 @@ class TestScaling:
     """Scaling: raw value * scale factor = engineering value."""
 
     def test_scaling_0_1(self) -> None:
-        """Raw 1234 with scale 0.1 -> 123.4."""
-        # daily_pv_generation has scale=0.1, valid_range=(0, 100)
-        # raw 1234 * 0.1 = 123.4 -- but that exceeds valid_range(0, 100)!
-        # Use battery_soc which has scale=0.1, valid_range=(0, 100)
-        # raw 500 * 0.1 = 50.0 -- in range
-        raw = _make_raw(battery_soc=500)
+        """Raw 500 with scale 0.1 -> 50.0%."""
+        raw = _make_raw(battery_soc=[500])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.battery_soc_pct == pytest.approx(50.0)
 
     def test_scaling_applied_to_daily_pv(self) -> None:
         """daily_pv_generation: raw 234 * 0.1 = 23.4 kWh."""
-        raw = _make_raw(daily_pv_generation=234)
+        raw = _make_raw(daily_pv_generation=[234])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.pv_daily_kwh == pytest.approx(23.4)
 
     def test_scaling_applied_to_battery_temp(self) -> None:
         """battery_temperature: raw 300 * 0.1 = 30.0 C."""
-        raw = _make_raw(battery_temperature=300)
+        raw = _make_raw(battery_temperature=[300])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.battery_temp_c == pytest.approx(30.0)
 
-    def test_raw_1234_with_scale_0_1_produces_123_4(self) -> None:
-        """Explicit test: raw 1234 with scale 0.1 -> 123.4.
-
-        We verify this using daily_pv_generation (scale=0.1).
-        raw 1234 * 0.1 = 123.4 kWh -- but valid_range is (0, 100).
-        So this should return None (out of range). Instead, use a raw
-        value that stays in range: we test the math with battery_soc.
-        raw 1234 * 0.1 = 123.4 -- also out of range for battery_soc.
-        So we just verify the scaling arithmetic directly via a register
-        with a large enough range: battery_temp valid_range is (-20, 60).
-        raw 1234 * 0.1 = 123.4 -- also out of range.
-        The pure arithmetic test is covered by the normalize_value helper.
-        """
-        # Instead, test with total_pv_generation (U32, scale=0.1, range 0..1_000_000)
-        # Use a simple U16 that has enough range: actually let's just verify
-        # the scaling factor is applied for a known in-range value.
-        # raw 999 * 0.1 = 99.9 kWh -- in daily_pv_generation range (0, 100)
-        raw = _make_raw(daily_pv_generation=999)
+    def test_raw_999_with_scale_0_1_produces_99_9(self) -> None:
+        """raw 999 * 0.1 = 99.9 kWh (in daily_pv_generation range)."""
+        raw = _make_raw(daily_pv_generation=[999])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.pv_daily_kwh == pytest.approx(99.9)
@@ -324,21 +298,21 @@ class TestMissingRegister:
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
-    def test_missing_total_dc_power_hi(self) -> None:
+    def test_missing_total_dc_power(self) -> None:
         raw = _make_raw()
-        del raw["total_dc_power_hi"]
+        del raw["total_dc_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
-    def test_missing_load_power_lo(self) -> None:
+    def test_missing_load_power(self) -> None:
         raw = _make_raw()
-        del raw["load_power_lo"]
+        del raw["load_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
-    def test_missing_export_power_hi(self) -> None:
+    def test_missing_export_power(self) -> None:
         raw = _make_raw()
-        del raw["export_power_hi"]
+        del raw["export_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
@@ -357,32 +331,99 @@ class TestOutOfRange:
 
     def test_pv_power_over_max(self) -> None:
         """total_dc_power valid_range is (0, 20000). 25000 W is over."""
-        raw = _make_raw(total_dc_power_hi=0, total_dc_power_lo=25000)
+        raw = _make_raw(total_dc_power=[0, 25000])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
     def test_battery_soc_over_100(self) -> None:
-        """battery_soc valid_range is (0, 100). raw 1100 * 0.1 = 110% is over."""
-        raw = _make_raw(battery_soc=1100)
+        """battery_soc valid_range is (0, 100). raw 1100 * 0.1 = 110%."""
+        raw = _make_raw(battery_soc=[1100])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
     def test_out_of_range_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Out-of-range should log a warning with register name and raw value."""
-        raw = _make_raw(battery_soc=1100)
+        """Out-of-range should log a warning with register name."""
+        raw = _make_raw(battery_soc=[1100])
         with caplog.at_level(logging.WARNING):
             normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert any("battery_soc" in msg for msg in caplog.messages)
         # Should mention the raw value or scaled value
         assert any("1100" in msg or "110" in msg for msg in caplog.messages)
 
-    def test_negative_pv_power_out_of_range(self) -> None:
-        """total_dc_power is U32 so it can't be negative, but test via S32.
+    def test_negative_export_power_out_of_range(self) -> None:
+        """export_power valid_range is (-20000, 20000). -25000 is out.
 
-        export_power valid_range is (-20000, 20000). -25000 is out of range.
         -25000 in 32-bit two's complement: 0xFFFF9E58
         hi = 0xFFFF, lo = 0x9E58
         """
-        raw = _make_raw(export_power_hi=0xFFFF, export_power_lo=0x9E58)
+        raw = _make_raw(export_power=[0xFFFF, 0x9E58])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
+
+
+# ===========================================================================
+# Integration: poller output format feeds into normalizer
+# ===========================================================================
+
+
+class TestPollerNormalizerIntegration:
+    """Verify that the poller's output format is accepted by the normalizer.
+
+    The poller returns dict[str, list[int]] where each key is a register
+    name (from registers.py) and each value is a list of raw 16-bit words
+    sliced from the Modbus group response.  This test builds a realistic
+    poller-shaped dict using the register definitions and confirms that
+    normalize() produces a valid SungrowSample.
+    """
+
+    def test_simulated_poller_output_normalizes(self) -> None:
+        """Build a dict exactly as _extract_register_values would."""
+        from edge.src.registers import ALL_GROUPS
+
+        # Simulate raw Modbus words per group, then slice per register
+        # using the same logic as poller._extract_register_values.
+        raw: dict[str, list[int]] = {}
+        for group in ALL_GROUPS:
+            # Create a zeroed word buffer for the entire group
+            words = [0] * group.count
+            # Fill in known registers with realistic raw values
+            for reg in group.registers:
+                offset = reg.address - group.start_address
+                if reg.name == "total_dc_power":
+                    # U32: 3000 W -> [0x0000, 0x0BB8]
+                    words[offset] = 0x0000
+                    words[offset + 1] = 0x0BB8
+                elif reg.name == "daily_pv_generation":
+                    # U16: 45 * 0.1 = 4.5 kWh
+                    words[offset] = 45
+                elif reg.name == "battery_power":
+                    # S16: 750 W (charging)
+                    words[offset] = 750
+                elif reg.name == "battery_soc":
+                    # U16: 650 * 0.1 = 65.0%
+                    words[offset] = 650
+                elif reg.name == "battery_temperature":
+                    # U16: 230 * 0.1 = 23.0 C
+                    words[offset] = 230
+                elif reg.name == "load_power":
+                    # S32: 1500 W -> [0, 1500]
+                    words[offset] = 0
+                    words[offset + 1] = 1500
+                elif reg.name == "export_power":
+                    # S32: 800 W -> [0, 800]
+                    words[offset] = 0
+                    words[offset + 1] = 800
+            # Slice per register, exactly as the poller does
+            for reg in group.registers:
+                offset = reg.address - group.start_address
+                raw[reg.name] = words[offset : offset + reg.word_count]
+
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.pv_power_w == 3000.0
+        assert result.pv_daily_kwh == pytest.approx(4.5)
+        assert result.battery_power_w == 750.0
+        assert result.battery_soc_pct == pytest.approx(65.0)
+        assert result.battery_temp_c == pytest.approx(23.0)
+        assert result.load_power_w == 1500.0
+        assert result.export_power_w == 800.0

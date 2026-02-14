@@ -108,8 +108,15 @@ async def ingest(
     """
     config = request.app.state.config
 
-    # AC9: Check request body size
+    # AC9: Check request body size — pre-check Content-Length before buffering
     max_request_bytes = int(config.get("MAX_REQUEST_BYTES", "1048576"))
+    content_length = request.headers.get("content-length")
+    if content_length is not None and int(content_length) > max_request_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"Request body exceeds limit of {max_request_bytes} bytes."),
+        )
+
     body = await request.body()
     if len(body) > max_request_bytes:
         raise HTTPException(

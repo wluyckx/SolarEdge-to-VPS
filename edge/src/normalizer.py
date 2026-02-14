@@ -1,14 +1,19 @@
 """
 Pure normalizer that converts raw Modbus register values into a SungrowSample.
 
-Takes a flat dict of raw register integers (as returned by the poller),
-applies type conversions (U16/U32/S16/S32), scaling factors, and range
-validation, then returns a validated SungrowSample pydantic model.
+Takes a dict of raw register word lists (as returned by the poller), applies
+type conversions (U16/U32/S16/S32), scaling factors, and range validation,
+then returns a validated SungrowSample pydantic model.
+
+The poller returns ``dict[str, list[int]]`` where each key is a register name
+and each value is a list of 16-bit words (length 1 for U16/S16, length 2 for
+U32/S32).
 
 This is a pure function: no side effects, no I/O, no clock.  The device_id
 and timestamp are accepted as parameters so they can be injected by the caller.
 
 CHANGELOG:
+- 2026-02-14: Fix contract to accept poller's dict[str, list[int]] format
 - 2026-02-14: Initial creation (STORY-004)
 
 TODO:
@@ -28,9 +33,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Mapping from SungrowSample field names to register names.
 #
-# For 32-bit registers (U32/S32) the poller delivers two keys:
-#   "{name}_hi" (high word) and "{name}_lo" (low word).
-# For 16-bit registers (U16/S16) the poller delivers one key: "{name}".
+# The poller delivers dict[str, list[int]] where each key is a register name
+# and each value is a list of 16-bit words (1 word for U16/S16, 2 for U32/S32).
 # ---------------------------------------------------------------------------
 
 _FIELD_MAP: dict[str, str] = {
@@ -83,43 +87,50 @@ def _convert_s32(hi: int, lo: int) -> int:
 
 def _extract_value(
     reg_def: RegisterDef,
-    raw: dict[str, int],
+    raw: dict[str, list[int]],
 ) -> float | None:
     """Extract, type-convert, and scale a single register value.
 
-    For 32-bit types, expects keys ``"{name}_hi"`` and ``"{name}_lo"``
-    in *raw*.  For 16-bit types, expects a single key ``"{name}"``.
+    The *raw* dict maps register names to word lists as produced by the
+    poller: 1-element lists for U16/S16, 2-element lists for U32/S32.
 
     Returns the scaled float value, or ``None`` if the required raw
-    key(s) are missing or the scaled value falls outside the register's
-    valid_range.
+    key is missing, has wrong word count, or the scaled value falls
+    outside the register's valid_range.
     """
     name = reg_def.name
     reg_type = reg_def.reg_type
 
+    if name not in raw:
+        logger.warning("Register '%s': missing from raw data", name)
+        return None
+
+    words = raw[name]
+
     # --- Retrieve raw integer(s) ---
     if reg_type in ("U32", "S32"):
-        hi_key = f"{name}_hi"
-        lo_key = f"{name}_lo"
-        if hi_key not in raw or lo_key not in raw:
+        if len(words) < 2:
             logger.warning(
-                "Register '%s': missing raw keys (%s and/or %s)",
+                "Register '%s': expected 2 words for %s, got %d",
                 name,
-                hi_key,
-                lo_key,
+                reg_type,
+                len(words),
             )
             return None
-        hi_val = raw[hi_key]
-        lo_val = raw[lo_key]
+        hi_val, lo_val = words[0], words[1]
         if reg_type == "U32":
             raw_int = _convert_u32(hi_val, lo_val)
         else:
             raw_int = _convert_s32(hi_val, lo_val)
     elif reg_type in ("U16", "S16"):
-        if name not in raw:
-            logger.warning("Register '%s': missing raw key", name)
+        if len(words) < 1:
+            logger.warning(
+                "Register '%s': expected 1 word for %s, got 0",
+                name,
+                reg_type,
+            )
             return None
-        raw_val = raw[name]
+        raw_val = words[0]
         raw_int = _convert_u16(raw_val) if reg_type == "U16" else _convert_s16(raw_val)
     else:
         logger.warning("Register '%s': unsupported type '%s'", name, reg_type)
@@ -132,13 +143,12 @@ def _extract_value(
     if reg_def.valid_range is not None:
         lo, hi = reg_def.valid_range
         if not (lo <= scaled <= hi):
-            raw_key = raw.get(name, raw.get(f"{name}_hi", -1))
             logger.warning(
                 "Register '%s': scaled value %.4g "
-                "(raw=%d) outside valid range (%s, %s)",
+                "(raw words=%s) outside valid range (%s, %s)",
                 name,
                 scaled,
-                raw_key,
+                words,
                 lo,
                 hi,
             )
@@ -153,7 +163,7 @@ def _extract_value(
 
 
 def normalize(
-    raw: dict[str, int],
+    raw: dict[str, list[int]],
     *,
     device_id: str,
     ts: datetime,
@@ -165,9 +175,9 @@ def normalize(
     passed in by the caller.
 
     Args:
-        raw: Dict mapping register key names to raw integer values as
-            delivered by the poller.  For 32-bit registers the keys are
-            ``"{reg_name}_hi"`` and ``"{reg_name}_lo"``.
+        raw: Dict mapping register names to lists of raw 16-bit words,
+            as returned by the poller.  1-element lists for U16/S16,
+            2-element lists for U32/S32.
         device_id: Device identifier to embed in the sample.
         ts: Timestamp to embed in the sample.
 
