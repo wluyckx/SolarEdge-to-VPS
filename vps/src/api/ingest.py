@@ -138,7 +138,8 @@ async def ingest(
     except ValidationError as exc:
         return JSONResponse(
             status_code=422,
-            content={"detail": exc.errors()},
+            # Avoid embedding raw input bytes in error payload (not JSON serializable).
+            content={"detail": exc.errors(include_input=False)},
         )
 
     # AC6: Empty batch fast path
