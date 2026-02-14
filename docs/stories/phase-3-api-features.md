@@ -94,7 +94,7 @@ This phase is complete when:
     <ac id="AC2">frame=month returns daily buckets for current month</ac>
     <ac id="AC3">frame=year returns monthly buckets for current year</ac>
     <ac id="AC4">frame=all returns monthly buckets all-time</ac>
-    <ac id="AC5">Each bucket: avg_pv_power_w, avg_battery_power_w, avg_load_power_w, avg_battery_soc_pct, sample_count</ac>
+    <ac id="AC5">Each bucket: avg_pv_power_w, max_pv_power_w, avg_battery_power_w, avg_battery_soc_pct, avg_load_power_w, avg_export_power_w, sample_count</ac>
     <ac id="AC6">Bearer auth with device_id validation (403 on mismatch)</ac>
     <ac id="AC7">Invalid frame returns 422</ac>
     <ac id="AC8">Empty result returns empty series list</ac>

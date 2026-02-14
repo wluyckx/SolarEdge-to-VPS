@@ -44,6 +44,7 @@ This phase is complete when:
     <file>vps/Caddyfile</file>
     <file>vps/src/__init__.py</file>
     <file>vps/src/api/__init__.py</file>
+    <file>vps/src/api/main.py</file>
     <file>vps/src/api/deps.py</file>
     <file>vps/src/auth/__init__.py</file>
     <file>vps/src/db/__init__.py</file>

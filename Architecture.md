@@ -20,21 +20,21 @@ A standalone data collection and forwarding pipeline that reads real-time solar,
 |-----------|------------|---------|---------|
 | Language | Python | 3.12+ | All components |
 | Modbus Client | pymodbus | >=3.6 | Async Modbus TCP communication with WiNet-S |
-| Edge HTTP Client | httpx | latest | Async HTTPS batch upload to VPS |
-| Edge Buffer | SQLite (aiosqlite) | latest | Persistent spool for readings (WAL mode) |
-| Edge Config | pydantic-settings | latest | Environment variable configuration |
+| Edge HTTP Client | httpx | >=0.27 | Async HTTPS batch upload to VPS |
+| Edge Buffer | SQLite (aiosqlite) | >=0.20 | Persistent spool for readings (WAL mode) |
+| Edge Config | pydantic-settings | >=2.0 | Environment variable configuration |
 | Edge Validation | pydantic | >=2.0 | Data model validation |
-| VPS Framework | FastAPI | latest | REST API |
-| VPS Server | uvicorn | latest | ASGI server |
+| VPS Framework | FastAPI | >=0.110 | REST API |
+| VPS Server | uvicorn | >=0.29 | ASGI server |
 | VPS Database | PostgreSQL + TimescaleDB | pg16 + latest | Time-series storage with continuous aggregates |
-| VPS DB Driver | asyncpg | latest | Async PostgreSQL driver |
+| VPS DB Driver | asyncpg | >=0.29 | Async PostgreSQL driver |
 | VPS ORM | SQLAlchemy | 2.x | Async ORM |
 | VPS Cache | Redis | 7-alpine | Realtime cache |
-| VPS Migrations | Alembic | latest | Database schema migrations |
+| VPS Migrations | Alembic | >=1.13 | Database schema migrations |
 | VPS Reverse Proxy | Caddy | 2 | Auto-HTTPS, TLS termination |
-| Testing | pytest + pytest-asyncio | latest | Test framework |
-| Mocking | pytest-mock | latest | Mock framework |
-| Linting | ruff | latest | Linting and formatting |
+| Testing | pytest + pytest-asyncio | >=8.0 / >=0.23 | Test framework |
+| Mocking | pytest-mock | >=3.12 | Mock framework |
+| Linting | ruff | >=0.4 | Linting and formatting |
 
 ### Dependencies NOT in Tech Stack (Forbidden Without ADR)
 Any package not listed above requires an Architecture Proposal before use.
@@ -89,6 +89,7 @@ SolarEdge-to-VPS/
 │   │   ├── __init__.py
 │   │   ├── api/
 │   │   │   ├── __init__.py
+│   │   │   ├── main.py                # FastAPI app factory
 │   │   │   ├── ingest.py               # POST /v1/ingest — batch sample ingestion
 │   │   │   ├── realtime.py             # GET /v1/realtime — latest snapshot
 │   │   │   ├── series.py               # GET /v1/series — historical rollups
@@ -395,7 +396,7 @@ rm -rf __pycache__ .pytest_cache .mypy_cache .ruff_cache
 | `SUNGROW_SLAVE_ID` | Modbus slave/unit ID | Edge | No (default: 1) |
 | `POLL_INTERVAL_S` | Seconds between poll cycles | Edge | No (default: 5) |
 | `INTER_REGISTER_DELAY_MS` | Milliseconds between register group reads | Edge | No (default: 20) |
-| `VPS_INGEST_URL` | VPS ingest endpoint URL (HTTPS) | Edge | Yes |
+| `VPS_BASE_URL` | VPS base URL (HTTPS, e.g. https://solar.example.com) | Edge | Yes |
 | `VPS_DEVICE_TOKEN` | Bearer token for VPS auth | Edge | Yes |
 | `DEVICE_ID` | Device identifier | Edge | No (default: sungrow_host) |
 | `BATCH_SIZE` | Samples per upload batch | Edge | No (default: 30) |

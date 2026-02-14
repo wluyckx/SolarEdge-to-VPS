@@ -38,7 +38,7 @@ This phase is complete when:
     <ac id="AC1">edge/src/ is a valid Python package with __init__.py</ac>
     <ac id="AC2">edge/src/config.py loads all required env vars via pydantic-settings</ac>
     <ac id="AC3">Config validates SUNGROW_HOST is required, SUNGROW_PORT defaults to 502</ac>
-    <ac id="AC4">Config validates VPS_INGEST_URL scheme is HTTPS</ac>
+    <ac id="AC4">Config validates VPS_BASE_URL scheme is HTTPS</ac>
     <ac id="AC5">edge/tests/ directory exists with conftest.py and env fixtures</ac>
   </acceptance_criteria>
 
@@ -53,7 +53,7 @@ This phase is complete when:
 
   <test_plan>
     - Config loads valid env vars correctly
-    - Config raises on missing required vars (SUNGROW_HOST, VPS_INGEST_URL, VPS_DEVICE_TOKEN)
+    - Config raises on missing required vars (SUNGROW_HOST, VPS_BASE_URL, VPS_DEVICE_TOKEN)
     - Config rejects http:// VPS URL
     - Config defaults SUNGROW_PORT to 502, POLL_INTERVAL_S to 5, BATCH_SIZE to 30
     - pytest edge/tests/ all pass
@@ -62,7 +62,7 @@ This phase is complete when:
   <notes>
     - Follow P1-Edge-VPS edge/src/config.py pattern
     - Use pydantic-settings BaseSettings with model_config for env prefix
-    - Required vars: SUNGROW_HOST, VPS_INGEST_URL, VPS_DEVICE_TOKEN
+    - Required vars: SUNGROW_HOST, VPS_BASE_URL, VPS_DEVICE_TOKEN
     - Optional with defaults: SUNGROW_PORT(502), SUNGROW_SLAVE_ID(1), POLL_INTERVAL_S(5),
       INTER_REGISTER_DELAY_MS(20), BATCH_SIZE(30), UPLOAD_INTERVAL_S(10), SPOOL_PATH(/data/spool.db),
       DEVICE_ID(defaults to sungrow_host)
@@ -173,7 +173,7 @@ This phase is complete when:
     <item>Create edge/tests/fixtures/modbus_responses.json with realistic register values</item>
     <item>Mock pymodbus AsyncModbusTcpClient</item>
     <item>Test: successful read returns dict with all register names from registers.py</item>
-    <item>Test: partial Modbus error (one group fails) returns None for that group's registers</item>
+    <item>Test: partial Modbus error (one group fails) returns None for entire poll</item>
     <item>Test: full connection failure returns None and triggers backoff</item>
     <item>Test: inter-register delay is called between group reads</item>
     <item>Test: backoff increases exponentially on consecutive failures</item>
@@ -340,7 +340,7 @@ This phase is complete when:
 
   <acceptance_criteria>
     <ac id="AC1">Uploader peeks BATCH_SIZE samples from spool</ac>
-    <ac id="AC2">Uploader POSTs {"samples": [...]} to VPS_INGEST_URL/v1/ingest</ac>
+    <ac id="AC2">Uploader POSTs {"samples": [...]} to VPS_BASE_URL/v1/ingest</ac>
     <ac id="AC3">Uploader includes Bearer token in Authorization header</ac>
     <ac id="AC4">On 200 response: acks rows in spool</ac>
     <ac id="AC5">On failure (non-200, timeout, connection error): exponential backoff</ac>

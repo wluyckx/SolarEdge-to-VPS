@@ -105,8 +105,11 @@ manually. It is always present in context from the first message.
 
 ### Memory Directory
 
+Memory lives **outside** the git repository by design — it is per-machine, per-user state
+managed by the Claude Code platform. It is NOT committed to version control.
+
 ```
-.claude/projects/-Users-Wim-SolarEdge-to-VPS/memory/
+~/.claude/projects/-Users-Wim-SolarEdge-to-VPS/memory/
 ├── MEMORY.md          # Auto-loaded into system prompt (max 200 lines)
 ├── patterns.md        # Coding patterns, gotchas, lessons learned
 └── {topic}.md         # Additional topic files as needed
