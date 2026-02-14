@@ -1,8 +1,8 @@
 # Phase 1: Edge Foundation
 
-**Status**: In Progress
+**Status**: Done
 **Stories**: 6
-**Completed**: 3
+**Completed**: 6
 **Depends On**: None
 
 ---
@@ -138,7 +138,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-003" status="in_progress" complexity="L" tdd="required">
+<story id="STORY-003" status="done" complexity="L" tdd="required">
   <title>Modbus TCP poller</title>
   <dependencies>STORY-002</dependencies>
 
@@ -200,7 +200,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-004" status="in_progress" complexity="M" tdd="required">
+<story id="STORY-004" status="done" complexity="M" tdd="required">
   <title>Register normalizer</title>
   <dependencies>STORY-002</dependencies>
 
@@ -324,7 +324,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-006" status="in_progress" complexity="M" tdd="required">
+<story id="STORY-006" status="done" complexity="M" tdd="required">
   <title>HTTPS batch uploader</title>
   <dependencies>STORY-005</dependencies>
 

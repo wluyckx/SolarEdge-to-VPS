@@ -1,0 +1,33 @@
+{
+  "_comment": "Realistic Modbus input register responses for Sungrow SH4.0RS testing. Each group contains the raw 16-bit words that would be returned by read_input_registers for the group's contiguous address range.",
+  "device": {
+    "start_address": 4990,
+    "count": 11,
+    "registers": [21336, 12345, 12345, 12345, 12345, 12345, 12345, 12345, 12345, 12345, 3344],
+    "_description": "serial_number (10 words UTF8: 'S012345...') + device_type_code=3344"
+  },
+  "pv": {
+    "start_address": 5004,
+    "count": 15,
+    "registers": [0, 3200, 0, 0, 0, 0, 0, 185, 3210, 85, 3180, 82, 0, 0, 62500],
+    "_description": "total_dc_power=3200W, daily_pv_generation=18.5kWh, mppt1_voltage=321.0V, mppt1_current=8.5A, mppt2_voltage=318.0V, mppt2_current=8.2A, total_pv_generation=6250.0kWh"
+  },
+  "export": {
+    "start_address": 5083,
+    "count": 2,
+    "registers": [0, 1850],
+    "_description": "export_power=1850W (positive = exporting)"
+  },
+  "load": {
+    "start_address": 13008,
+    "count": 10,
+    "registers": [0, 1350, 65086, 0, 0, 0, 0, 0, 0, 45],
+    "_description": "load_power=1350W, grid_power=-450W (exporting), daily_direct_consumption=4.5kWh"
+  },
+  "battery": {
+    "start_address": 13022,
+    "count": 6,
+    "registers": [500, 725, 285, 0, 32, 48],
+    "_description": "battery_power=500W (charging), battery_soc=72.5%, battery_temperature=28.5C, daily_battery_discharge=3.2kWh, daily_battery_charge=4.8kWh"
+  }
+}

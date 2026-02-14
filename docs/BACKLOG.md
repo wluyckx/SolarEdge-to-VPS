@@ -4,8 +4,8 @@
   <project>Sungrow-to-VPS Pipeline</project>
   <last_updated>2026-02-14</last_updated>
   <total_stories>16</total_stories>
-  <done>6</done>
-  <progress>38%</progress>
+  <done>11</done>
+  <progress>69%</progress>
   <changelog>
     <entry date="2026-02-14">Doc harmonization: BACKLOG.md is now summary-only; phase story files are single source of truth for AC, allowed scope, test plans</entry>
     <entry date="2026-02-14">Initial backlog creation (16 stories across 4 phases)</entry>
@@ -155,23 +155,23 @@
 <phase id="1" name="Edge Foundation" story_file="docs/stories/phase-1-edge-foundation.md">
   <story id="STORY-001" status="done" complexity="M" tdd="recommended" />
   <story id="STORY-002" status="done" complexity="M" tdd="required" />
-  <story id="STORY-003" status="in_progress" complexity="L" tdd="required" />
-  <story id="STORY-004" status="in_progress" complexity="M" tdd="required" />
+  <story id="STORY-003" status="done" complexity="L" tdd="required" />
+  <story id="STORY-004" status="done" complexity="M" tdd="required" />
   <story id="STORY-005" status="done" complexity="M" tdd="required" />
-  <story id="STORY-006" status="in_progress" complexity="M" tdd="required" />
+  <story id="STORY-006" status="done" complexity="M" tdd="required" />
 </phase>
 
 <phase id="2" name="VPS Ingestion" story_file="docs/stories/phase-2-vps-ingestion.md">
   <story id="STORY-007" status="done" complexity="M" tdd="recommended" />
   <story id="STORY-008" status="done" complexity="L" tdd="required" />
   <story id="STORY-009" status="done" complexity="S" tdd="required" />
-  <story id="STORY-010" status="in_progress" complexity="L" tdd="required" />
+  <story id="STORY-010" status="done" complexity="L" tdd="required" />
 </phase>
 
 <phase id="3" name="API Features" story_file="docs/stories/phase-3-api-features.md">
   <story id="STORY-011" status="pending" complexity="M" tdd="required" />
   <story id="STORY-012" status="pending" complexity="L" tdd="required" />
-  <story id="STORY-013" status="in_progress" complexity="M" tdd="recommended" />
+  <story id="STORY-013" status="done" complexity="M" tdd="recommended" />
 </phase>
 
 <phase id="4" name="Production" story_file="docs/stories/phase-4-production.md">
@@ -186,12 +186,12 @@
 
 <progress>
   <phase_summary>
-    <phase id="1" name="Edge Foundation" stories="6" done="3" progress="50%" link="stories/phase-1-edge-foundation.md" />
-    <phase id="2" name="VPS Ingestion" stories="4" done="3" progress="75%" link="stories/phase-2-vps-ingestion.md" />
-    <phase id="3" name="API Features" stories="3" done="0" progress="0%" link="stories/phase-3-api-features.md" />
+    <phase id="1" name="Edge Foundation" stories="6" done="6" progress="100%" link="stories/phase-1-edge-foundation.md" />
+    <phase id="2" name="VPS Ingestion" stories="4" done="4" progress="100%" link="stories/phase-2-vps-ingestion.md" />
+    <phase id="3" name="API Features" stories="3" done="1" progress="33%" link="stories/phase-3-api-features.md" />
     <phase id="4" name="Production" stories="3" done="0" progress="0%" link="stories/phase-4-production.md" />
   </phase_summary>
-  <total stories="16" done="6" progress="38%" />
+  <total stories="16" done="11" progress="69%" />
 </progress>
 
 <!-- ============================================================ -->

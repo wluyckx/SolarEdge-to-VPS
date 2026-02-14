@@ -1,8 +1,8 @@
 # Phase 2: VPS Ingestion
 
-**Status**: In Progress
+**Status**: Done
 **Stories**: 4
-**Completed**: 3
+**Completed**: 4
 **Depends On**: None (can be developed in parallel with Phase 1)
 
 ---
@@ -176,7 +176,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-010" status="in_progress" complexity="L" tdd="required">
+<story id="STORY-010" status="done" complexity="L" tdd="required">
   <title>Ingest endpoint</title>
   <dependencies>STORY-008, STORY-009</dependencies>
 

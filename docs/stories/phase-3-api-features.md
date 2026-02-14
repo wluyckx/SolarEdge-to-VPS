@@ -136,7 +136,7 @@ This phase is complete when:
 
 ---
 
-<story id="STORY-013" status="in_progress" complexity="M" tdd="recommended">
+<story id="STORY-013" status="done" complexity="M" tdd="recommended">
   <title>Continuous aggregates</title>
   <dependencies>STORY-008</dependencies>
 
