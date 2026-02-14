@@ -51,6 +51,8 @@
   </deliverables>
 
   <post_mvp>
+    <item>Auth hardening — token rotation, revocation, expiry (security story)</item>
+    <item>Rate limiting — per-IP and per-token throttling on auth + ingest endpoints</item>
     <item>Battery cycle analysis and optimization insights</item>
     <item>EMS mode read/write control via Modbus</item>
     <item>Correlation with P1-Edge-VPS grid data for cross-pipeline analytics</item>
@@ -251,6 +253,8 @@ Parallelizable:
   <idea>Alerting — battery health degradation, inverter faults, communication failures</idea>
   <idea>MPPT performance tracking — per-string monitoring and shading detection</idea>
   <idea>Grafana dashboard for operational visibility</idea>
+  <idea>Auth hardening — token rotation/revocation/expiry, consider JWT migration</idea>
+  <idea>Rate limiting — per-IP and per-token throttling (Caddy rate_limit or middleware)</idea>
 </parking_lot>
 
 <!-- ============================================================ -->

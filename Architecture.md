@@ -26,7 +26,7 @@ A standalone data collection and forwarding pipeline that reads real-time solar,
 | Edge Validation | pydantic | >=2.0 | Data model validation |
 | VPS Framework | FastAPI | >=0.110 | REST API |
 | VPS Server | uvicorn | >=0.29 | ASGI server |
-| VPS Database | PostgreSQL + TimescaleDB | pg16 + latest | Time-series storage with continuous aggregates |
+| VPS Database | PostgreSQL + TimescaleDB | pg16 + >=2.14 | Time-series storage with continuous aggregates |
 | VPS DB Driver | asyncpg | >=0.29 | Async PostgreSQL driver |
 | VPS ORM | SQLAlchemy | 2.x | Async ORM |
 | VPS Cache | Redis | 7-alpine | Realtime cache |
@@ -405,6 +405,8 @@ rm -rf __pycache__ .pytest_cache .mypy_cache .ruff_cache
 | `DATABASE_URL` | PostgreSQL connection string | VPS | Yes |
 | `REDIS_URL` | Redis connection string | VPS | Yes |
 | `DEVICE_TOKENS` | Token:device_id pairs | VPS | Yes |
+| `MAX_SAMPLES_PER_REQUEST` | Max samples in a single ingest batch | VPS | No (default: 1000) |
+| `MAX_REQUEST_BYTES` | Max ingest request body size | VPS | No (default: 1048576) |
 | `CACHE_TTL_S` | Redis cache TTL | VPS | No (default: 5) |
 
 **Security**: All secrets via environment variables, never in code. Edge `.env` file gitignored.
@@ -581,7 +583,7 @@ services:
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     depends_on: [postgres, redis]
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.14-pg16
   redis:
     image: redis:7-alpine
   caddy:

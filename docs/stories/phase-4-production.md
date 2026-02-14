@@ -99,7 +99,7 @@ This phase is complete when:
 
   <acceptance_criteria>
     <ac id="AC1">Edge writes /data/health.json with: last_poll_ts, last_upload_ts, spool_count</ac>
-    <ac id="AC2">VPS GET /health returns {"status": "ok"} with 200 (no auth required)</ac>
+    <ac id="AC2">VPS GET /health returns {"status": "ok"} with 200 (no auth required, localhost/Docker-internal only)</ac>
     <ac id="AC3">Edge Dockerfile has HEALTHCHECK testing health.json existence</ac>
     <ac id="AC4">VPS Dockerfile has HEALTHCHECK testing /health endpoint</ac>
   </acceptance_criteria>
@@ -124,6 +124,8 @@ This phase is complete when:
     - Follow P1-Edge-VPS health patterns exactly
     - Edge health.py: simple function that writes JSON to configurable path
     - VPS health.py: FastAPI route, no auth dependency
+    - /health must NOT be exposed publicly via Caddy; Caddyfile should not proxy /health
+    - Docker HEALTHCHECK accesses /health internally (container network), never via public URL
   </notes>
 </story>
 
@@ -151,6 +153,7 @@ This phase is complete when:
     <ac id="AC7">ruff format --check passes on full codebase</ac>
     <ac id="AC8">All tests pass (pytest edge/tests/ vps/tests/)</ac>
     <ac id="AC9">.gitignore covers: __pycache__, .env, *.db, .venv, .pytest_cache, .ruff_cache, .mypy_cache</ac>
+    <ac id="AC10">Caddyfile does NOT proxy /health to public internet (internal-only endpoint)</ac>
   </acceptance_criteria>
 
   <allowed_scope>

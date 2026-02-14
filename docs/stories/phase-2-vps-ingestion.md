@@ -195,6 +195,8 @@ This phase is complete when:
     <ac id="AC5">Invalidates Redis key realtime:{device_id} on success</ac>
     <ac id="AC6">Empty samples list returns {"inserted": 0} (no error)</ac>
     <ac id="AC7">Invalid payload returns 422</ac>
+    <ac id="AC8">Batch size capped at MAX_SAMPLES_PER_REQUEST (default 1000); exceeding returns 413</ac>
+    <ac id="AC9">Request body capped at MAX_REQUEST_BYTES (default 1 MB); exceeding returns 413</ac>
   </acceptance_criteria>
 
   <allowed_scope>
@@ -216,12 +218,15 @@ This phase is complete when:
     <item>Test: invalid payload (missing fields) → 422</item>
     <item>Test: Redis cache key deleted on success</item>
     <item>Test: no auth → 401</item>
+    <item>Test: batch exceeding MAX_SAMPLES_PER_REQUEST → 413</item>
+    <item>Test: request body exceeding MAX_REQUEST_BYTES → 413</item>
   </test_first>
 
   <test_plan>
     - Integration tests with FastAPI TestClient
     - Mock DB session and Redis client
     - Test success, auth failures, validation failures, duplicates
+    - Test payload size limits (batch count and body bytes)
     - pytest vps/tests/ all pass
   </test_plan>
 
@@ -230,6 +235,8 @@ This phase is complete when:
     - Use SQLAlchemy insert().on_conflict_do_nothing()
     - Validate each sample's fields before insert
     - Log inserted count at INFO level
+    - MAX_SAMPLES_PER_REQUEST and MAX_REQUEST_BYTES configurable via env vars
+    - Check batch length before parsing all samples to fail fast
   </notes>
 </story>
 
@@ -245,4 +252,5 @@ This phase is complete when:
 - Schema divergence: If SungrowSample model changes during Phase 1, the VPS schema must update. Mitigation: define model in Phase 1 first, then build VPS schema to match.
 
 ### Technical Debt
-- No rate limiting implemented (see parking lot). Add in future phase if needed.
+- No rate limiting implemented (see parking lot). Leaves DoS/brute-force exposure on auth + ingest. Mitigated by Caddy reverse proxy and Bearer token requirement. Add in future phase.
+- Token lifecycle is static (parse at startup, no rotation/revocation/expiry). Acceptable for single-device MVP; auth hardening story in parking lot for post-MVP.
