@@ -30,7 +30,6 @@ At minimum, set:
 - `REDIS_URL` -- Redis connection string
 - `DEVICE_TOKENS` -- at least one `token:device_id` pair
 - `POSTGRES_PASSWORD` -- PostgreSQL password
-- `DOMAIN` -- your public domain name
 
 ### 2. Generate Device Tokens
 
@@ -55,16 +54,17 @@ cd vps
 docker-compose up -d
 ```
 
-This starts four containers:
+This starts three containers:
 
 | Container | Role |
 |-----------|------|
 | `api` | FastAPI application on port 8000 (internal) |
 | `postgres` | TimescaleDB on port 5432 (internal) |
 | `redis` | Redis on port 6379 (internal) |
-| `caddy` | Reverse proxy on ports 80 and 443 (public) |
 
-Caddy automatically provisions a TLS certificate from Let's Encrypt for the configured `DOMAIN`. HTTPS is available within minutes of the first start.
+:::note
+TLS termination is handled by a **VPS-wide Caddy instance** running separately (not part of this compose stack). Caddy reverse-proxies `api.your-domain.com` to the API container's exposed port 8000. This setup allows a single Caddy instance to serve multiple projects on the same VPS.
+:::
 
 ### 4. Verify VPS
 
@@ -137,7 +137,7 @@ docker exec sungrow-edge cat /data/health.json
 
 - [ ] VPS: DNS A record points to VPS IP
 - [ ] VPS: `.env` file populated with all required variables
-- [ ] VPS: `docker-compose up -d` -- all four containers running
+- [ ] VPS: `docker-compose up -d` -- all three containers running
 - [ ] VPS: `curl https://your-domain/` returns `{"status": "ok"}`
 - [ ] Edge: `.env` file populated with `SUNGROW_HOST`, `VPS_BASE_URL`, `VPS_DEVICE_TOKEN`
 - [ ] Edge: WiNet-S dongle reachable from edge device (`ping $SUNGROW_HOST`)

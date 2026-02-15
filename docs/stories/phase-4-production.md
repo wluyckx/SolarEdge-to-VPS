@@ -124,7 +124,7 @@ This phase is complete when:
     - Follow P1-Edge-VPS health patterns exactly
     - Edge health.py: simple function that writes JSON to configurable path
     - VPS health.py: FastAPI route, no auth dependency
-    - /health must NOT be exposed publicly via Caddy; Caddyfile should not proxy /health
+    - /health must NOT be exposed publicly via Caddy; the VPS-wide Caddy config should not proxy /health
     - Docker HEALTHCHECK accesses /health internally (container network), never via public URL
   </notes>
 </story>
@@ -145,7 +145,7 @@ This phase is complete when:
 
   <acceptance_criteria>
     <ac id="AC1">Edge Dockerfile builds successfully</ac>
-    <ac id="AC2">VPS docker-compose.yml starts all services (api, postgres, redis, caddy)</ac>
+    <ac id="AC2">VPS docker-compose.yml starts all services (api, postgres, redis)</ac>
     <ac id="AC3">.env.example documents all required and optional environment variables</ac>
     <ac id="AC4">Restart policies configured (unless-stopped for all services)</ac>
     <ac id="AC5">All logging is structured JSON (no print statements)</ac>
@@ -153,14 +153,13 @@ This phase is complete when:
     <ac id="AC7">ruff format --check passes on full codebase</ac>
     <ac id="AC8">All tests pass (pytest edge/tests/ vps/tests/)</ac>
     <ac id="AC9">.gitignore covers: __pycache__, .env, *.db, .venv, .pytest_cache, .ruff_cache, .mypy_cache</ac>
-    <ac id="AC10">Caddyfile does NOT proxy /health to public internet (internal-only endpoint)</ac>
+    <ac id="AC10">VPS-wide Caddy does NOT proxy /health to public internet (internal-only endpoint)</ac>
   </acceptance_criteria>
 
   <allowed_scope>
     <file>edge/Dockerfile</file>
     <file>vps/Dockerfile</file>
     <file>vps/docker-compose.yml</file>
-    <file>vps/Caddyfile</file>
     <file>.env.example</file>
     <file>.gitignore</file>
   </allowed_scope>

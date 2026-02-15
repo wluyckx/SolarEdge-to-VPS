@@ -1,4 +1,0 @@
-{$DOMAIN} {
-    reverse_proxy /v1/* api:8000
-    # /health is deliberately NOT proxied — internal only
-}

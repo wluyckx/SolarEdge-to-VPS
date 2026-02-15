@@ -72,14 +72,12 @@ Each pair maps a Bearer token to a device ID. The token is the string before the
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `POSTGRES_PASSWORD` | Yes | -- | Password for the PostgreSQL superuser |
-| `DOMAIN` | Yes | -- | Public domain name for Caddy TLS certificate provisioning |
 
 ### Validation Rules
 
 | Variable | Rule |
 |----------|------|
 | `POSTGRES_PASSWORD` | Non-empty string |
-| `DOMAIN` | Valid domain name (e.g., `solar.example.com`) |
 
 ## Example `.env` File
 
@@ -104,5 +102,4 @@ MAX_REQUEST_BYTES=1048576
 
 # Infrastructure
 POSTGRES_PASSWORD=secret
-DOMAIN=solar.example.com
 ```

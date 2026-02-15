@@ -84,7 +84,6 @@ SolarEdge-to-VPS/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── docker-compose.yml
-│   ├── Caddyfile
 │   ├── src/
 │   │   ├── __init__.py
 │   │   ├── api/

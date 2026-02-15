@@ -41,7 +41,6 @@ This phase is complete when:
     <file>vps/requirements.txt</file>
     <file>vps/Dockerfile</file>
     <file>vps/docker-compose.yml</file>
-    <file>vps/Caddyfile</file>
     <file>vps/src/__init__.py</file>
     <file>vps/src/api/__init__.py</file>
     <file>vps/src/api/main.py</file>

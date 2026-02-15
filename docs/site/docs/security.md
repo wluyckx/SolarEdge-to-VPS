@@ -9,17 +9,17 @@ This page documents the security controls in the Sungrow-to-VPS system.
 
 ## HTTPS-Only Boundary
 
-All traffic between the edge daemon and the VPS is encrypted via HTTPS. The Caddy reverse proxy terminates TLS and automatically provisions Let's Encrypt certificates for the configured domain.
+All traffic between the edge daemon and the VPS is encrypted via HTTPS. A VPS-wide Caddy instance terminates TLS and automatically provisions Let's Encrypt certificates. Caddy runs as a separate Docker service shared across all projects on the VPS, reverse-proxying to the API container's exposed port 8000.
 
 The edge daemon validates that `VPS_BASE_URL` starts with `https://` at startup. Plain HTTP URLs are rejected.
 
 ```mermaid
 flowchart LR
-    EDGE["Edge Daemon"] -->|HTTPS / TLS 1.2+| CADDY["Caddy"]
-    CADDY -->|HTTP (internal)| API["FastAPI"]
+    EDGE["Edge Daemon"] -->|HTTPS / TLS 1.2+| CADDY["Caddy\n(VPS-wide)"]
+    CADDY -->|HTTP (Docker network)| API["FastAPI"]
 ```
 
-The internal connection between Caddy and FastAPI is plain HTTP, but it occurs entirely within the Docker network and is not exposed to the host or the internet.
+The internal connection between Caddy and FastAPI is plain HTTP, but it occurs entirely within the Docker network and is not exposed to the internet.
 
 ## Bearer Token Authentication
 
@@ -41,7 +41,7 @@ On every request, the API validates that the `device_id` in the request body or 
 
 ## /health Endpoint Exclusion
 
-The `GET /health` endpoint is **not proxied through Caddy**. It is only accessible within the Docker network (e.g., by the Docker daemon for health checks or by other containers). This prevents external actors from probing the health endpoint.
+The `GET /health` endpoint should **not be proxied through Caddy** to the public internet. The VPS-wide Caddy configuration should only proxy API paths (e.g., `/v1/*`), keeping `/health` accessible only within the Docker network for Docker HEALTHCHECK and internal monitoring.
 
 The `GET /` root endpoint is accessible through Caddy but does not require authentication and returns only `{"status": "ok"}`.
 
