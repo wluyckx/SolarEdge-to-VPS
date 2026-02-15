@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import json
 import logging
 import signal
@@ -81,14 +80,6 @@ def configure_logging() -> None:
     root.setLevel(logging.INFO)
 
 
-def _masked_token(value: str | None) -> str:
-    """Return a short non-reversible token fingerprint for diagnostics."""
-    if not value:
-        return "empty"
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:10]
-    return f"len={len(value)} sha256={digest}"
-
-
 # ---------------------------------------------------------------------------
 # Startup config logging
 # ---------------------------------------------------------------------------
@@ -109,8 +100,7 @@ def log_config_summary(settings: object) -> None:
         "poll_interval_s=%s, upload_interval_s=%s, "
         "inter_register_delay_ms=%s, batch_size=%s, "
         "spool_path=%s, device_id=%s, vps_base_url=%s, "
-        "raw_debug_enabled=%s, raw_debug_every_n_polls=%s, "
-        "vps_token_masked=%s",
+        "raw_debug_enabled=%s, raw_debug_every_n_polls=%s",
         settings.sungrow_host,  # type: ignore[union-attr]
         settings.sungrow_port,  # type: ignore[union-attr]
         settings.sungrow_slave_id,  # type: ignore[union-attr]
@@ -123,7 +113,6 @@ def log_config_summary(settings: object) -> None:
         settings.vps_base_url,  # type: ignore[union-attr]
         settings.raw_debug_enabled,  # type: ignore[union-attr]
         settings.raw_debug_every_n_polls,  # type: ignore[union-attr]
-        _masked_token(settings.vps_device_token),  # type: ignore[union-attr]
     )
 
 

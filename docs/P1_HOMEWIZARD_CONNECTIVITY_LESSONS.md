@@ -6,7 +6,7 @@ Scope: HA add-on -> VPS API over HTTPS with Docker + Caddy
 ## What Went Wrong
 
 1. Reverse proxy pointed to the wrong upstream.
-- `api.sungrow...` resolved to a different container than the intended API.
+- `api.example.com` resolved to a different container than the intended API.
 - Result: valid HTTP responses from the wrong app (`/health` body mismatch), misleading auth errors.
 
 2. Ambiguous Docker DNS service names.
@@ -62,10 +62,10 @@ curl -si http://127.0.0.1:8000/health
 
 # From VPS host
 curl -si http://127.0.0.1:18000/health
-curl -si https://api.sungrow.wimluyckx.dev/health
+curl -si https://api.example.com/health
 
 # Caddy upstream block currently loaded
-docker exec caddy sh -lc "cat /etc/caddy/Caddyfile | sed -n '/api.sungrow.wimluyckx.dev/,/}/p'"
+docker exec caddy sh -lc "cat /etc/caddy/Caddyfile | sed -n '/api.example.com/,/}/p'"
 
 # Which upstream does Caddy resolve?
 docker exec caddy sh -lc 'wget -qO- http://sungrow_api:8000/health || true'
