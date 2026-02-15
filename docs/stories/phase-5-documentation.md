@@ -1,8 +1,8 @@
 # Phase 5: Documentation
 
-**Status**: Not Started
+**Status**: Done
 **Stories**: 2
-**Completed**: 0
+**Completed**: 2
 **Depends On**: Phase 3 (API endpoints), Phase 4 (production readiness)
 
 ---
@@ -10,17 +10,17 @@
 ## Phase Completion Criteria
 
 This phase is complete when:
-- [ ] All stories have status "done"
-- [ ] Docusaurus site builds without errors
-- [ ] OpenAPI spec matches implemented endpoints
-- [ ] All API endpoints have request/response examples
-- [ ] Functional documentation covers full pipeline architecture
+- [x] All stories have status "done"
+- [x] Docusaurus site builds without errors
+- [x] OpenAPI spec matches implemented endpoints
+- [x] All API endpoints have request/response examples
+- [x] Functional documentation covers full pipeline architecture
 
 ---
 
 ## Stories
 
-<story id="STORY-017" status="pending" complexity="M" tdd="not-applicable">
+<story id="STORY-017" status="done" complexity="M" tdd="not-applicable">
   <title>OpenAPI reference documentation (Docusaurus)</title>
   <dependencies>STORY-010, STORY-011, STORY-012, STORY-016</dependencies>
 
@@ -72,11 +72,15 @@ This phase is complete when:
     - The OpenAPI spec is a static export, not a live proxy — regenerate when endpoints change
     - Docusaurus version: use latest 3.x
   </notes>
+
+  <changelog>
+    - 2026-02-15: STORY-017 implemented. Docusaurus 3.9.2 scaffolded in docs/site/ with TypeScript config. Removed default blog/tutorial content. Created hand-written Markdown docs: intro, authentication (AC7), POST /v1/ingest (AC4), GET /v1/realtime (AC5), GET /v1/series (AC6), GET /health (AC9), error reference (AC8). OpenAPI 3.1 spec saved as static/openapi.json (AC2). All endpoints documented with method, path, parameters, request body, responses, and curl examples (AC3). Sidebar configured for Introduction > Authentication > API Reference > Error Reference. Build passes (AC1).
+  </changelog>
 </story>
 
 ---
 
-<story id="STORY-018" status="pending" complexity="M" tdd="not-applicable">
+<story id="STORY-018" status="done" complexity="M" tdd="not-applicable">
   <title>Functional documentation (Docusaurus)</title>
   <dependencies>STORY-017</dependencies>
 

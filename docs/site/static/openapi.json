@@ -1,0 +1,481 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sungrow-to-VPS API",
+    "description": "Solar telemetry API for Sungrow inverter data.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Root health check endpoint.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Return a simple health status. No authentication required. Internal only.",
+        "operationId": "health_health_get",
+        "tags": ["health"],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ingest": {
+      "post": {
+        "summary": "Ingest",
+        "description": "Ingest a batch of Sungrow telemetry samples. Validates device_id ownership, enforces batch size and body size limits, inserts with ON CONFLICT DO NOTHING for idempotency.",
+        "operationId": "ingest_v1_ingest_post",
+        "tags": ["ingest"],
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed Content-Length header"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "403": {
+            "description": "Device ID mismatch"
+          },
+          "413": {
+            "description": "Request body or batch size exceeds limit"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/realtime": {
+      "get": {
+        "summary": "Realtime",
+        "description": "Return the most recent SungrowSample for a device. Uses Redis cache with configurable TTL.",
+        "operationId": "realtime_v1_realtime_get",
+        "tags": ["realtime"],
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SungrowSample"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "403": {
+            "description": "Device ID mismatch"
+          },
+          "404": {
+            "description": "No data found for device"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    },
+    "/v1/series": {
+      "get": {
+        "summary": "Get Series",
+        "description": "Return time-bucketed historical rollup data for a device. Queries continuous aggregate views based on the requested frame.",
+        "operationId": "get_series_v1_series_get",
+        "tags": ["series"],
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            },
+            "description": "Device identifier to query."
+          },
+          {
+            "name": "frame",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["day", "month", "year", "all"],
+              "title": "Frame"
+            },
+            "description": "Time frame: day, month, year, or all."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "403": {
+            "description": "Device ID mismatch"
+          },
+          "422": {
+            "description": "Validation Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SampleIn": {
+        "type": "object",
+        "title": "SampleIn",
+        "description": "Single telemetry sample from a Sungrow inverter.",
+        "required": [
+          "device_id",
+          "ts",
+          "pv_power_w",
+          "battery_power_w",
+          "battery_soc_pct",
+          "load_power_w",
+          "export_power_w"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ts"
+          },
+          "pv_power_w": {
+            "type": "number",
+            "title": "Pv Power W"
+          },
+          "pv_daily_kwh": {
+            "anyOf": [
+              {"type": "number"},
+              {"type": "null"}
+            ],
+            "default": null,
+            "title": "Pv Daily Kwh"
+          },
+          "battery_power_w": {
+            "type": "number",
+            "title": "Battery Power W"
+          },
+          "battery_soc_pct": {
+            "type": "number",
+            "title": "Battery Soc Pct"
+          },
+          "battery_temp_c": {
+            "anyOf": [
+              {"type": "number"},
+              {"type": "null"}
+            ],
+            "default": null,
+            "title": "Battery Temp C"
+          },
+          "load_power_w": {
+            "type": "number",
+            "title": "Load Power W"
+          },
+          "export_power_w": {
+            "type": "number",
+            "title": "Export Power W"
+          },
+          "sample_count": {
+            "type": "integer",
+            "default": 1,
+            "title": "Sample Count"
+          }
+        }
+      },
+      "IngestPayload": {
+        "type": "object",
+        "title": "IngestPayload",
+        "description": "Batch payload for the ingest endpoint.",
+        "required": ["samples"],
+        "properties": {
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SampleIn"
+            },
+            "title": "Samples"
+          }
+        }
+      },
+      "IngestResponse": {
+        "type": "object",
+        "title": "IngestResponse",
+        "description": "Response from the ingest endpoint.",
+        "required": ["inserted"],
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "title": "Inserted"
+          }
+        }
+      },
+      "SungrowSample": {
+        "type": "object",
+        "title": "SungrowSample",
+        "description": "Full telemetry sample response.",
+        "properties": {
+          "device_id": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pv_power_w": {
+            "type": "number"
+          },
+          "pv_daily_kwh": {
+            "anyOf": [
+              {"type": "number"},
+              {"type": "null"}
+            ]
+          },
+          "battery_power_w": {
+            "type": "number"
+          },
+          "battery_soc_pct": {
+            "type": "number"
+          },
+          "battery_temp_c": {
+            "anyOf": [
+              {"type": "number"},
+              {"type": "null"}
+            ]
+          },
+          "load_power_w": {
+            "type": "number"
+          },
+          "export_power_w": {
+            "type": "number"
+          },
+          "sample_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "BucketOut": {
+        "type": "object",
+        "title": "BucketOut",
+        "description": "Single time-bucketed aggregation result.",
+        "required": [
+          "bucket",
+          "avg_pv_power_w",
+          "max_pv_power_w",
+          "avg_battery_power_w",
+          "avg_battery_soc_pct",
+          "avg_load_power_w",
+          "avg_export_power_w",
+          "sample_count"
+        ],
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Bucket"
+          },
+          "avg_pv_power_w": {
+            "type": "number",
+            "title": "Avg Pv Power W"
+          },
+          "max_pv_power_w": {
+            "type": "number",
+            "title": "Max Pv Power W"
+          },
+          "avg_battery_power_w": {
+            "type": "number",
+            "title": "Avg Battery Power W"
+          },
+          "avg_battery_soc_pct": {
+            "type": "number",
+            "title": "Avg Battery Soc Pct"
+          },
+          "avg_load_power_w": {
+            "type": "number",
+            "title": "Avg Load Power W"
+          },
+          "avg_export_power_w": {
+            "type": "number",
+            "title": "Avg Export Power W"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count"
+          }
+        }
+      },
+      "SeriesResponse": {
+        "type": "object",
+        "title": "SeriesResponse",
+        "description": "Response model for the series endpoint.",
+        "required": ["device_id", "frame", "series"],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "frame": {
+            "type": "string",
+            "title": "Frame"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BucketOut"
+            },
+            "title": "Series"
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "type": "object",
+        "title": "HTTPValidationError",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "title": "ValidationError",
+        "required": ["loc", "msg", "type"],
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {"type": "string"},
+                {"type": "integer"}
+              ]
+            },
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

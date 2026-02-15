@@ -4,8 +4,8 @@
   <project>Sungrow-to-VPS Pipeline</project>
   <last_updated>2026-02-15</last_updated>
   <total_stories>18</total_stories>
-  <done>16</done>
-  <progress>89%</progress>
+  <done>18</done>
+  <progress>100%</progress>
   <changelog>
     <entry date="2026-02-15">Added Phase 5 (Documentation): STORY-017 OpenAPI reference, STORY-018 functional docs (Docusaurus)</entry>
     <entry date="2026-02-14">Doc harmonization: BACKLOG.md is now summary-only; phase story files are single source of truth for AC, allowed scope, test plans</entry>
@@ -187,8 +187,8 @@
 </phase>
 
 <phase id="5" name="Documentation" story_file="docs/stories/phase-5-documentation.md">
-  <story id="STORY-017" status="pending" complexity="M" tdd="not-applicable" />
-  <story id="STORY-018" status="pending" complexity="M" tdd="not-applicable" />
+  <story id="STORY-017" status="done" complexity="M" tdd="not-applicable" />
+  <story id="STORY-018" status="done" complexity="M" tdd="not-applicable" />
 </phase>
 
 <!-- ============================================================ -->
@@ -201,9 +201,9 @@
     <phase id="2" name="VPS Ingestion" stories="4" done="4" progress="100%" link="stories/phase-2-vps-ingestion.md" />
     <phase id="3" name="API Features" stories="3" done="3" progress="100%" link="stories/phase-3-api-features.md" />
     <phase id="4" name="Production" stories="3" done="3" progress="100%" link="stories/phase-4-production.md" />
-    <phase id="5" name="Documentation" stories="2" done="0" progress="0%" link="stories/phase-5-documentation.md" />
+    <phase id="5" name="Documentation" stories="2" done="2" progress="100%" link="stories/phase-5-documentation.md" />
   </phase_summary>
-  <total stories="18" done="16" progress="89%" />
+  <total stories="18" done="18" progress="100%" />
 </progress>
 
 <!-- ============================================================ -->
