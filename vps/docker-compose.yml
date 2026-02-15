@@ -7,7 +7,7 @@ services:
       - postgres
       - redis
     ports:
-      - "127.0.0.1:18002:8001"
+      - "127.0.0.1:18002:8002"
     networks:
       default:
         aliases:
