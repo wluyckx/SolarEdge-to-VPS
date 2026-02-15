@@ -2,11 +2,12 @@
 
 <metadata>
   <project>Sungrow-to-VPS Pipeline</project>
-  <last_updated>2026-02-14</last_updated>
-  <total_stories>16</total_stories>
+  <last_updated>2026-02-15</last_updated>
+  <total_stories>18</total_stories>
   <done>16</done>
-  <progress>100%</progress>
+  <progress>89%</progress>
   <changelog>
+    <entry date="2026-02-15">Added Phase 5 (Documentation): STORY-017 OpenAPI reference, STORY-018 functional docs (Docusaurus)</entry>
     <entry date="2026-02-14">Doc harmonization: BACKLOG.md is now summary-only; phase story files are single source of truth for AC, allowed scope, test plans</entry>
     <entry date="2026-02-14">Initial backlog creation (16 stories across 4 phases)</entry>
   </changelog>
@@ -145,6 +146,11 @@
     <entry priority="15" story="STORY-015" title="Health checks" complexity="S" deps="STORY-007, STORY-014" />
     <entry priority="16" story="STORY-016" title="Production hardening" complexity="M" deps="STORY-015" />
   </tier>
+
+  <tier name="Documentation" description="API reference and functional docs (Docusaurus)">
+    <entry priority="17" story="STORY-017" title="OpenAPI reference documentation" complexity="M" deps="STORY-010, STORY-011, STORY-012, STORY-016" />
+    <entry priority="18" story="STORY-018" title="Functional documentation" complexity="M" deps="STORY-017" />
+  </tier>
 </priority_order>
 
 <!-- ============================================================ -->
@@ -180,6 +186,11 @@
   <story id="STORY-016" status="done" complexity="M" tdd="recommended" />
 </phase>
 
+<phase id="5" name="Documentation" story_file="docs/stories/phase-5-documentation.md">
+  <story id="STORY-017" status="pending" complexity="M" tdd="not-applicable" />
+  <story id="STORY-018" status="pending" complexity="M" tdd="not-applicable" />
+</phase>
+
 <!-- ============================================================ -->
 <!-- PROGRESS OVERVIEW                                             -->
 <!-- ============================================================ -->
@@ -190,8 +201,9 @@
     <phase id="2" name="VPS Ingestion" stories="4" done="4" progress="100%" link="stories/phase-2-vps-ingestion.md" />
     <phase id="3" name="API Features" stories="3" done="3" progress="100%" link="stories/phase-3-api-features.md" />
     <phase id="4" name="Production" stories="3" done="3" progress="100%" link="stories/phase-4-production.md" />
+    <phase id="5" name="Documentation" stories="2" done="0" progress="0%" link="stories/phase-5-documentation.md" />
   </phase_summary>
-  <total stories="16" done="16" progress="100%" />
+  <total stories="18" done="16" progress="89%" />
 </progress>
 
 <!-- ============================================================ -->
@@ -225,6 +237,10 @@ Phase 4 (Production):
 STORY-003 + STORY-004 + STORY-005 + STORY-006 → STORY-014 (Edge main loop)
 STORY-007 + STORY-014 → STORY-015 (Health checks)
 STORY-015 → STORY-016 (Production hardening)
+
+Phase 5 (Documentation):
+STORY-010 + STORY-011 + STORY-012 + STORY-016 → STORY-017 (OpenAPI reference docs)
+STORY-017 → STORY-018 (Functional docs)
 
 Parallelizable:
 - STORY-001 and STORY-007 (edge and VPS scaffolding) can run in parallel
