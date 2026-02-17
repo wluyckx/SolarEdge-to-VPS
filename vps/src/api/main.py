@@ -20,6 +20,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.health import router as health_router
 from src.api.ingest import router as ingest_router
@@ -100,6 +101,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://dashboard.energy.wimluyckx.dev"],
+    allow_methods=["GET"],
+    allow_headers=["Authorization"],
+)
 
 app.include_router(health_router)
 app.include_router(ingest_router)
