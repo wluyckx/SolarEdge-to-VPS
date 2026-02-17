@@ -17,6 +17,7 @@ WORKDIR /app
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 
+COPY alembic.ini .
 COPY src/ src/
 
 # Run as non-root user
