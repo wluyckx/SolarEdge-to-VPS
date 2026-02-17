@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
