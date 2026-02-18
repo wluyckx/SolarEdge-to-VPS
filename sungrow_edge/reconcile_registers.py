@@ -15,6 +15,11 @@ Usage:
     HA_HOST env var overrides the default HA address (http://192.168.51.251:8123).
 
 CHANGELOG:
+- 2026-02-18: Fix or-bug in match logic (Python " " is truthy; or short-circuited to first
+  result, hiding ×0.1/S16 matches). Replaced with explicit "★"/else comparisons.
+  Update labels: 13022=soc(×0.1=%), 13023=voltage(×0.1=V). Confirmed via two-point
+  reconcile: raw=138→13.8% at cloud-soc=10.2%; raw=460→46.0% at cloud-soc=44.1%.
+  Δ matches charging rate × ~15min GoSungrow cloud lag.
 - 2026-02-18: Add MPPT1 voltage (5012) + current (5013) probes; print computed V×I DC PV power
   after each iteration to compare against 5016 and HA pv reference.
 - 2026-02-18: Add S32 pair decoding for 13007-8 (load), 13009-10 (grid), 5213-14 (battery)
@@ -47,13 +52,22 @@ PROBE_REGISTERS: list[tuple[int, str, int]] = [
     (5013, "5013 mppt1_a(×0.1=A)", 1),
     # PV power — confirmed at 5016
     (5016, "5016 pv?", 1),
-    # Battery power — mkaiser says 5213 (S32); 13022 confirmed with scale=10
+    # Battery power — confirmed at 5213 (S16, scale=-1)
     (5213, "5213-14 bat?(S32)", 2),
-    (13022, "13022 bat(×10)", 1),
+    # Battery status block (13022-13027) — confirmed 2026-02-18:
+    #   13022 = SOC (×0.1=%), 13023 = voltage (×0.1=V), 13024 = temp (×0.1=°C)
+    #   13025 = always 0, 13026 = lifetime discharge (kWh), 13027 = always 0
+    (13022, "13022 soc(×0.1=%)", 1),
+    (13023, "13023 voltage(×0.1=V)", 1),
     # Load power — community says 13007 (S32)
     (13007, "13007-8 load?(S32)", 2),
     # Grid/export — community says 13009 (S32); 5083 confirmed ILLEGAL on this firmware
     (13009, "13009-10 grid?(S32)", 2),
+    # Battery status remainder
+    (13024, "13024 temp(×0.1=°C)", 1),
+    (13025, "13025(always 0)", 1),
+    (13026, "13026 lifetime_dis(×0.1=kWh)", 1),
+    (13027, "13027(always 0)", 1),
     # Unknowns that showed non-zero — kept for reference
     (5007, "5007", 1),
     (5086, "5086", 1),
@@ -69,7 +83,7 @@ SCAN_BLOCKS: list[tuple[int, int]] = [
     (5086, 1),    # 5086
     (5213, 2),    # 5213–5214  (battery S32 — mkaiser)
     (13007, 4),   # 13007–13010 (load S32 + grid S32)
-    (13020, 3),   # 13020–13022
+    (13020, 8),   # 13020–13027 (13022=SOC, 13023=voltage, 13024=temp)
     (13033, 1),   # 13033
 ]
 
@@ -255,8 +269,8 @@ async def _run_iteration(
         f"load={_fmt(load)} exp={_fmt(exp)} temp={_fmt(temp,'°C',1)}"
     )
     # Two different header formats depending on word_count
-    hdr1 = f"  {'addr':<22}  {'w0':>6}  {'×1':>7}  {'×0.1':>7}  {'S16':>7}  {'pv?':>4}  {'bat?':>4}  {'load?':>5}  {'exp?':>4}"
-    hdr2 = f"  {'addr':<22}  {'w0':>6}  {'w1':>6}  {'S32-BE':>9}  {'S32-WS':>9}  {'pv?':>4}  {'bat?':>4}  {'load?':>5}  {'exp?':>4}"
+    hdr1 = f"  {'addr':<22}  {'w0':>6}  {'×1':>7}  {'×0.1':>7}  {'S16':>7}  {'pv?':>4}  {'bat?':>4}  {'soc?':>4}  {'load?':>5}  {'exp?':>4}"
+    hdr2 = f"  {'addr':<22}  {'w0':>6}  {'w1':>6}  {'S32-BE':>9}  {'S32-WS':>9}  {'pv?':>4}  {'bat?':>4}  {'soc?':>4}  {'load?':>5}  {'exp?':>4}"
     print("  " + "-" * 80)
 
     if raw_map is None:
@@ -279,25 +293,27 @@ async def _run_iteration(
             w1 = raw_map.get(addr + 1, 0)
             be = _s32_be(w0, w1)
             ws = _s32_ws(w0, w1)
-            m_pv   = _match(be, pv)   or _match(ws, pv)
-            m_bat  = _match(be, bat)  or _match(ws, bat)
-            m_load = _match(be, load) or _match(ws, load)
-            m_exp  = _match(be, exp)  or _match(ws, exp)
+            m_pv   = "★" if _match(be, pv)   == "★" or _match(ws, pv)   == "★" else " "
+            m_bat  = "★" if _match(be, bat)  == "★" or _match(ws, bat)  == "★" else " "
+            m_soc  = "★" if _match(be, soc)  == "★" or _match(ws, soc)  == "★" else " "
+            m_load = "★" if _match(be, load) == "★" or _match(ws, load) == "★" else " "
+            m_exp  = "★" if _match(be, exp)  == "★" or _match(ws, exp)  == "★" else " "
             print(
                 f"  {label:<22}  {w0:>6}  {w1:>6}  {be:>+9}  {ws:>+9}"
-                f"  {m_pv:>4}  {m_bat:>4}  {m_load:>5}  {m_exp:>4}"
+                f"  {m_pv:>4}  {m_bat:>4}  {m_soc:>4}  {m_load:>5}  {m_exp:>4}"
             )
         else:
             x1  = float(w0)
             x01 = w0 * 0.1
             s16 = float(_s16(w0))
-            m_pv   = _match(x1, pv)   or _match(x01, pv)   or _match(s16, pv)
-            m_bat  = _match(x1, bat)  or _match(x01, bat)  or _match(s16, bat)
-            m_load = _match(x1, load) or _match(x01, load) or _match(s16, load)
-            m_exp  = _match(x1, exp)  or _match(x01, exp)  or _match(s16, exp)
+            m_pv   = "★" if any(_match(v, pv)   == "★" for v in (x1, x01, s16)) else " "
+            m_bat  = "★" if any(_match(v, bat)  == "★" for v in (x1, x01, s16)) else " "
+            m_soc  = "★" if any(_match(v, soc)  == "★" for v in (x1, x01, s16)) else " "
+            m_load = "★" if any(_match(v, load) == "★" for v in (x1, x01, s16)) else " "
+            m_exp  = "★" if any(_match(v, exp)  == "★" for v in (x1, x01, s16)) else " "
             print(
                 f"  {label:<22}  {w0:>6}  {x1:>7.0f}  {x01:>7.1f}  {s16:>+7.0f}"
-                f"  {m_pv:>4}  {m_bat:>4}  {m_load:>5}  {m_exp:>4}"
+                f"  {m_pv:>4}  {m_bat:>4}  {m_soc:>4}  {m_load:>5}  {m_exp:>4}"
             )
 
     # Computed: MPPT1 V×I as DC PV power ground truth
@@ -333,7 +349,8 @@ async def _main(args: argparse.Namespace) -> None:
     print(
         "Legend: ★ = within 10% of HA reference\n"
         "  1-word rows: ×1, ×0.1, S16 interpretations\n"
-        "  2-word rows: S32-BE (big-endian, high word first) and S32-WS (word-swapped)"
+        "  2-word rows: S32-BE (big-endian, high word first) and S32-WS (word-swapped)\n"
+        "  soc? column: matches HA soc_pct value"
     )
 
     for i in range(args.iterations):

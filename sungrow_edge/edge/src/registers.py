@@ -15,13 +15,18 @@ References:
     - https://github.com/bohdan-s/SunGather
 
 CHANGELOG:
+- 2026-02-18: Fix battery_soc address 13023→13022. Confirmed via two-point reconcile:
+  13022 raw=138 at GoSungrow soc=10.2% (13.8% after accounting for ~15min cloud lag);
+  13022 raw=460 at GoSungrow soc=44.1% (46.0% at same lag). Δ matches charging rate ×
+  lag duration exactly. Register 13023 is battery voltage (97.0 V, confirmed constant
+  over 10–44% SOC as expected for LFP flat curve). BATTERY_GROUP start 13023→13022,
+  count 5→6. Added battery_voltage register at 13023.
 - 2026-02-18: Replace battery_power source: 13022 (S16 scale=10) → 5213 (S16 scale=-1).
-  13022 is battery current (0.1 A/LSB), not power; scale=10 only approximated watts at
-  ~100V battery voltage. Register 5213 S16 confirmed as signed battery power via
-  reconcile: raw negative = charging, raw positive = discharging. scale=-1 maps to
-  dashboard convention (positive = charging). Confirmed vs HA: 5213 ≈ -1373 to -1416
-  while HA reports +1353 W charging (2% off). New BATTERY_POWER_GROUP at 5213.
-  BATTERY_GROUP now starts at 13023 (SOC, temp, daily energy).
+  Previous belief that 13022 was battery current now corrected (see entry above).
+  Register 5213 S16 confirmed as signed battery power via reconcile: raw negative =
+  charging, raw positive = discharging. scale=-1 maps to dashboard convention (positive
+  = charging). Confirmed vs HA: 5213 ≈ -1373 to -1416 while HA reports +1353 W (2% off).
+  New BATTERY_POWER_GROUP at 5213.
 - 2026-02-18: Fix load_power address 13008→13007 and type S32→U16. The S32 pair is
   word-swapped (low word at 13007, high word at 13008); since load never exceeds 32767 W
   on this 4 kW inverter the high word is always 0. Previous address caused always-zero reads
@@ -316,21 +321,46 @@ BATTERY_POWER_GROUP = RegisterGroup(
 )
 
 # ---------------------------------------------------------------------------
-# Battery status group (addresses 13023-13027)
-# SOC, temperature, daily energy counters.
-# Note: 13022 (previously mapped as battery_power) is battery current
-# (0.1 A/LSB); it is NOT included here. Use BATTERY_POWER_GROUP instead.
+# Battery status group (addresses 13022-13027)
+# SOC, voltage, temperature, lifetime energy counters.
+#
+# Register map confirmed 2026-02-18 via two-point reconcile at soc=10.2% and 44.1%:
+#   13022 = battery SOC (%, 0.1%/LSB) — real-time; GoSungrow cloud lags ~15 min
+#   13023 = battery voltage (V, 0.1V/LSB) — confirmed constant at 97.0V over 10–44%
+#            SOC, consistent with LFP flat discharge curve (≈97V for 96V nominal pack)
+#   13024 = battery temperature (°C, 0.1°C/LSB) — confirmed vs HA (14.1°C ≈ 14.2°C)
+#   13025 = always 0 on this firmware
+#   13026 = lifetime total battery discharge (kWh, 0.1kWh/LSB) — 2574.1 kWh observed
+#   13027 = always 0 on this firmware (counter not implemented or different unit)
 # ---------------------------------------------------------------------------
 
 _BATTERY_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=13023,
+        address=13022,
         name="battery_soc",
         reg_type="U16",
         unit="%",
         scale=0.1,
         valid_range=(0, 100),
-        description="Battery state of charge",
+        description=(
+            "Battery state of charge in %. Real-time Modbus value leads "
+            "GoSungrow cloud by ~15 min. Confirmed 2026-02-18: raw=138→13.8% at "
+            "cloud soc=10.2%; raw=460→46.0% at cloud soc=44.1% (Δ matches "
+            "charging rate × ~15 min lag exactly)."
+        ),
+    ),
+    RegisterDef(
+        address=13023,
+        name="battery_voltage",
+        reg_type="U16",
+        unit="V",
+        scale=0.1,
+        valid_range=(80, 130),
+        description=(
+            "Battery terminal voltage. Confirmed 2026-02-18: reads constant 97.0V "
+            "over 10–44% SOC, consistent with LFP flat discharge curve (~97V for "
+            "96V nominal pack). Previously misidentified as battery_soc."
+        ),
     ),
     RegisterDef(
         address=13024,
@@ -339,32 +369,23 @@ _BATTERY_REGISTERS: list[RegisterDef] = [
         unit="C",
         scale=0.1,
         valid_range=(-20, 60),
-        description="Battery temperature",
+        description="Battery temperature. Confirmed 2026-02-18: 14.2°C vs HA 14.1°C.",
     ),
     RegisterDef(
         address=13026,
-        name="daily_battery_discharge",
+        name="total_battery_discharge",
         reg_type="U16",
         unit="kWh",
         scale=0.1,
-        valid_range=(0, 100),
-        description="Battery energy discharged today",
-    ),
-    RegisterDef(
-        address=13027,
-        name="daily_battery_charge",
-        reg_type="U16",
-        unit="kWh",
-        scale=0.1,
-        valid_range=(0, 100),
-        description="Battery energy charged today",
+        valid_range=(0, 1_000_000),
+        description="Lifetime accumulated battery discharge energy (2574.1 kWh observed).",
     ),
 ]
 
 BATTERY_GROUP = RegisterGroup(
     group_name="battery",
-    start_address=13023,
-    count=5,  # 13023..13027 inclusive = 5 words
+    start_address=13022,
+    count=6,  # 13022..13027 inclusive = 6 words (13025 and 13027 always 0)
     registers=_BATTERY_REGISTERS,
 )
 
