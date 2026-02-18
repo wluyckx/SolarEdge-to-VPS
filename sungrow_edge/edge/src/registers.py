@@ -15,6 +15,11 @@ References:
     - https://github.com/bohdan-s/SunGather
 
 CHANGELOG:
+- 2026-02-17: Fix register addresses for load/battery groups — addresses 13008-13027
+  were inverter output registers (phase currents), not EMS registers. Correct addresses
+  are 13119 (load_power), 13121 (feed_in_power), 13126 (battery_charge_power),
+  13141 (battery_soc), 13143 (battery_temperature), 13150 (battery_discharge_power).
+  Verified via GoSungrow HA sensor reconciliation against VPS API.
 - 2026-02-14: Initial creation (STORY-002)
 
 TODO:
@@ -238,104 +243,89 @@ EXPORT_GROUP = RegisterGroup(
 )
 
 # ---------------------------------------------------------------------------
-# Load / consumption group (addresses 13008-13017)
+# Consumption group (addresses 13119-13126)
+# EMS registers: load, feed-in, battery charge power.
 # ---------------------------------------------------------------------------
 
-_LOAD_REGISTERS: list[RegisterDef] = [
+_CONSUMPTION_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=13008,
+        address=13119,
         name="load_power",
         reg_type="S32",
         unit="W",
         scale=1,
         valid_range=(-20000, 50000),
-        description="Total house load consumption (two registers)",
+        description="Total house load consumption (p13119)",
     ),
     RegisterDef(
-        address=13010,
-        name="grid_power",
-        reg_type="S16",
+        address=13121,
+        name="feed_in_power",
+        reg_type="S32",
         unit="W",
         scale=1,
         valid_range=(-20000, 20000),
         description=(
-            "Inverter-estimated grid power. Positive = importing, negative = exporting."
+            "Grid feed-in power (p13121). "
+            "Positive = exporting to grid, negative = importing."
         ),
     ),
     RegisterDef(
-        address=13017,
-        name="daily_direct_consumption",
+        address=13126,
+        name="battery_charge_power",
         reg_type="U16",
-        unit="kWh",
-        scale=0.1,
-        valid_range=(0, 200),
-        description="PV energy directly consumed today (not via grid/battery)",
+        unit="W",
+        scale=1,
+        valid_range=(0, 10000),
+        description="Battery charging power (p13126). Always >= 0.",
     ),
 ]
 
-LOAD_GROUP = RegisterGroup(
-    group_name="load",
-    start_address=13008,
-    count=10,  # 13008..13017 inclusive = 10 words
-    registers=_LOAD_REGISTERS,
+CONSUMPTION_GROUP = RegisterGroup(
+    group_name="consumption",
+    start_address=13119,
+    count=8,  # 13119..13126 inclusive = 8 words
+    registers=_CONSUMPTION_REGISTERS,
 )
 
 # ---------------------------------------------------------------------------
-# Battery group (addresses 13022-13027)
+# Battery group (addresses 13141-13150)
+# EMS registers: SOC, temperature, discharge power.
 # ---------------------------------------------------------------------------
 
 _BATTERY_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=13022,
-        name="battery_power",
-        reg_type="S16",
-        unit="W",
-        scale=1,
-        valid_range=(-10000, 10000),
-        description="Battery power. Positive = charging, negative = discharging.",
-    ),
-    RegisterDef(
-        address=13023,
+        address=13141,
         name="battery_soc",
         reg_type="U16",
         unit="%",
         scale=0.1,
         valid_range=(0, 100),
-        description="Battery state of charge",
+        description="Battery state of charge (p13141)",
     ),
     RegisterDef(
-        address=13024,
+        address=13143,
         name="battery_temperature",
-        reg_type="U16",
+        reg_type="S16",
         unit="C",
         scale=0.1,
         valid_range=(-20, 60),
-        description="Battery temperature",
+        description="Battery temperature (p13143)",
     ),
     RegisterDef(
-        address=13026,
-        name="daily_battery_discharge",
+        address=13150,
+        name="battery_discharge_power",
         reg_type="U16",
-        unit="kWh",
-        scale=0.1,
-        valid_range=(0, 100),
-        description="Battery energy discharged today",
-    ),
-    RegisterDef(
-        address=13027,
-        name="daily_battery_charge",
-        reg_type="U16",
-        unit="kWh",
-        scale=0.1,
-        valid_range=(0, 100),
-        description="Battery energy charged today",
+        unit="W",
+        scale=1,
+        valid_range=(0, 10000),
+        description="Battery discharging power (p13150). Always >= 0.",
     ),
 ]
 
 BATTERY_GROUP = RegisterGroup(
     group_name="battery",
-    start_address=13022,
-    count=6,  # 13022..13027 inclusive = 6 words
+    start_address=13141,
+    count=10,  # 13141..13150 inclusive = 10 words
     registers=_BATTERY_REGISTERS,
 )
 
@@ -347,7 +337,7 @@ ALL_GROUPS: list[RegisterGroup] = [
     DEVICE_GROUP,
     PV_GROUP,
     EXPORT_GROUP,
-    LOAD_GROUP,
+    CONSUMPTION_GROUP,
     BATTERY_GROUP,
 ]
 """All register groups in recommended read order."""

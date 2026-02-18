@@ -5,6 +5,8 @@ Verifies type conversions (U16/U32/S16/S32), scaling, range validation,
 and that the normalizer is a pure function with no side effects.
 
 CHANGELOG:
+- 2026-02-17: Update for register address fix — battery computed from charge/discharge,
+  export fallback uses feed_in_power instead of grid_power
 - 2026-02-14: Initial creation -- TDD tests written first (STORY-004)
 
 TODO:
@@ -37,29 +39,32 @@ def _make_raw(**overrides: list[int]) -> dict[str, list[int]]:
     valid_range.
 
     Required SungrowSample fields and the registers that feed them:
-        pv_power_w        <- total_dc_power      (U32, scale=1, W)
-        pv_daily_kwh      <- daily_pv_generation  (U16, scale=0.1, kWh)
-        battery_power_w   <- battery_power         (S16, scale=1, W)
-        battery_soc_pct   <- battery_soc           (U16, scale=0.1, %)
-        battery_temp_c    <- battery_temperature   (U16, scale=0.1, C)
-        load_power_w      <- load_power            (S32, scale=1, W)
-        export_power_w    <- export_power          (S32, scale=1, W)
+        pv_power_w        <- total_dc_power           (U32, scale=1, W)
+        pv_daily_kwh      <- daily_pv_generation       (U16, scale=0.1, kWh)
+        battery_power_w   <- battery_charge_power - battery_discharge_power (U16, W)
+        battery_soc_pct   <- battery_soc               (U16, scale=0.1, %)
+        battery_temp_c    <- battery_temperature        (S16, scale=0.1, C)
+        load_power_w      <- load_power                (S32, scale=1, W)
+        export_power_w    <- export_power              (S32, scale=1, W)
     """
     defaults: dict[str, list[int]] = {
         # U32: [hi_word, lo_word] -> (0 << 16) | 1000 = 1000 W
         "total_dc_power": [0, 1000],
         # U16: [50] * 0.1 = 5.0 kWh
         "daily_pv_generation": [50],
-        # S16: [500] -> 500 W (charging)
-        "battery_power": [500],
+        # U16: [800] -> 800 W (charging)
+        "battery_charge_power": [800],
+        # U16: [300] -> 300 W (discharging)
+        # battery_power_w = 800 - 300 = 500 W
+        "battery_discharge_power": [300],
         # U16: [800] * 0.1 = 80.0 %
         "battery_soc": [800],
-        # U16: [250] * 0.1 = 25.0 C
+        # S16: [250] * 0.1 = 25.0 C
         "battery_temperature": [250],
         # S32: [hi, lo] -> 2000 W
         "load_power": [0, 2000],
-        # S16: [0xFE3E] -> -450 W (import/export sign per register definition)
-        "grid_power": [0xFE3E],
+        # S32: [hi, lo] -> 450 W (feed-in, same sign as export_power)
+        "feed_in_power": [0, 450],
         # S32: [hi, lo] -> 500 W
         "export_power": [0, 500],
     }
@@ -204,26 +209,19 @@ class TestU32Assembly:
 class TestS16Signed:
     """S16: signed 16-bit two's complement conversion."""
 
-    def test_s16_negative_ffff(self) -> None:
-        """Register 0xFFFF -> -1 (two's complement)."""
-        raw = _make_raw(battery_power=[0xFFFF])
+    def test_s16_negative_via_temperature(self) -> None:
+        """S16 register 0xFFEC -> -20 * 0.1 = -2.0 C (two's complement)."""
+        raw = _make_raw(battery_temperature=[0xFFEC])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
-        assert result.battery_power_w == -1.0
+        assert result.battery_temp_c == pytest.approx(-2.0)
 
-    def test_s16_negative_large(self) -> None:
-        """Register 0xFC18 -> -1000 (two's complement, in range)."""
-        raw = _make_raw(battery_power=[0xFC18])
+    def test_s16_positive_temperature(self) -> None:
+        """S16 register 300 * 0.1 = 30.0 C."""
+        raw = _make_raw(battery_temperature=[300])
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
-        assert result.battery_power_w == -1000.0
-
-    def test_s16_positive(self) -> None:
-        """Register 0x03E8 -> 1000 (positive stays positive)."""
-        raw = _make_raw(battery_power=[0x03E8])
-        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
-        assert result is not None
-        assert result.battery_power_w == 1000.0
+        assert result.battery_temp_c == pytest.approx(30.0)
 
 
 # ===========================================================================
@@ -254,6 +252,43 @@ class TestS32Signed:
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
         assert result.load_power_w == -3536.0
+
+
+# ===========================================================================
+# Battery power computation (charge - discharge)
+# ===========================================================================
+
+
+class TestBatteryPowerComputation:
+    """battery_power_w = battery_charge_power - battery_discharge_power."""
+
+    def test_charging(self) -> None:
+        """Only charging: 1000 - 0 = +1000 W."""
+        raw = _make_raw(battery_charge_power=[1000], battery_discharge_power=[0])
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.battery_power_w == 1000.0
+
+    def test_discharging(self) -> None:
+        """Only discharging: 0 - 3761 = -3761 W."""
+        raw = _make_raw(battery_charge_power=[0], battery_discharge_power=[3761])
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.battery_power_w == -3761.0
+
+    def test_idle(self) -> None:
+        """Idle: 0 - 0 = 0 W."""
+        raw = _make_raw(battery_charge_power=[0], battery_discharge_power=[0])
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.battery_power_w == 0.0
+
+    def test_net_charging(self) -> None:
+        """Net charge: 800 - 300 = +500 W (default)."""
+        raw = _make_raw()
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.battery_power_w == 500.0
 
 
 # ===========================================================================
@@ -301,9 +336,15 @@ class TestScaling:
 class TestMissingRegister:
     """Missing required register -> normalize returns None."""
 
-    def test_missing_battery_power(self) -> None:
+    def test_missing_battery_charge_power(self) -> None:
         raw = _make_raw()
-        del raw["battery_power"]
+        del raw["battery_charge_power"]
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is None
+
+    def test_missing_battery_discharge_power(self) -> None:
+        raw = _make_raw()
+        del raw["battery_discharge_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
@@ -319,11 +360,12 @@ class TestMissingRegister:
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is None
 
-    def test_missing_export_power(self) -> None:
+    def test_missing_export_power_falls_back_to_feed_in(self) -> None:
         raw = _make_raw()
         del raw["export_power"]
         result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
         assert result is not None
+        # Falls back to feed_in_power = 450 W
         assert result.export_power_w == pytest.approx(450.0)
 
     def test_empty_dict_returns_none(self) -> None:
@@ -406,19 +448,26 @@ class TestPollerNormalizerIntegration:
                 elif reg.name == "daily_pv_generation":
                     # U16: 45 * 0.1 = 4.5 kWh
                     words[offset] = 45
-                elif reg.name == "battery_power":
-                    # S16: 750 W (charging)
-                    words[offset] = 750
+                elif reg.name == "battery_charge_power":
+                    # U16: 1000 W (charging)
+                    words[offset] = 1000
+                elif reg.name == "battery_discharge_power":
+                    # U16: 250 W (discharging)
+                    words[offset] = 250
                 elif reg.name == "battery_soc":
                     # U16: 650 * 0.1 = 65.0%
                     words[offset] = 650
                 elif reg.name == "battery_temperature":
-                    # U16: 230 * 0.1 = 23.0 C
+                    # S16: 230 * 0.1 = 23.0 C
                     words[offset] = 230
                 elif reg.name == "load_power":
                     # S32: 1500 W -> [0, 1500]
                     words[offset] = 0
                     words[offset + 1] = 1500
+                elif reg.name == "feed_in_power":
+                    # S32: 600 W -> [0, 600]
+                    words[offset] = 0
+                    words[offset + 1] = 600
                 elif reg.name == "export_power":
                     # S32: 800 W -> [0, 800]
                     words[offset] = 0
@@ -432,6 +481,7 @@ class TestPollerNormalizerIntegration:
         assert result is not None
         assert result.pv_power_w == 3000.0
         assert result.pv_daily_kwh == pytest.approx(4.5)
+        # battery_power_w = charge(1000) - discharge(250) = 750
         assert result.battery_power_w == 750.0
         assert result.battery_soc_pct == pytest.approx(65.0)
         assert result.battery_temp_c == pytest.approx(23.0)

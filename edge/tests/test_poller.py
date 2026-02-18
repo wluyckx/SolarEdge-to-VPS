@@ -368,7 +368,7 @@ class TestPollerReturnValues:
 
         assert result is not None
         assert "load_power" in result
-        assert "battery_power" in result
+        assert "battery_soc" in result
         assert "export_power" not in result
 
     @pytest.mark.asyncio

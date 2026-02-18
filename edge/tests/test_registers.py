@@ -4,6 +4,7 @@ Tests for Sungrow Modbus register map.
 Verifies register map integrity, consistency, and grouping for batched reads.
 
 CHANGELOG:
+- 2026-02-17: Update for register address fix — consumption/battery groups
 - 2026-02-14: Initial creation — TDD tests written first (STORY-002)
 
 TODO:
@@ -34,21 +35,19 @@ PV_REGISTER_NAMES = {
 }
 
 BATTERY_REGISTER_NAMES = {
-    "battery_power",
     "battery_soc",
     "battery_temperature",
-    "daily_battery_charge",
-    "daily_battery_discharge",
+    "battery_discharge_power",
 }
 
-LOAD_REGISTER_NAMES = {
+CONSUMPTION_REGISTER_NAMES = {
     "load_power",
-    "daily_direct_consumption",
+    "feed_in_power",
+    "battery_charge_power",
 }
 
 GRID_REGISTER_NAMES = {
     "export_power",
-    "grid_power",
 }
 
 DEVICE_REGISTER_NAMES = {
@@ -123,25 +122,20 @@ class TestBatteryRegisters:
         for reg_name in BATTERY_REGISTER_NAMES:
             assert reg_name in names, f"Battery register '{reg_name}' missing"
 
-    def test_battery_power_is_signed(self) -> None:
-        reg = ALL_REGISTERS["battery_power"]
-        assert reg.reg_type == "S16"
-        assert reg.unit == "W"
-
     def test_battery_soc_has_scaling(self) -> None:
         reg = ALL_REGISTERS["battery_soc"]
         assert reg.scale == 0.1
         assert reg.unit == "%"
 
-    def test_battery_temperature_has_scaling(self) -> None:
+    def test_battery_temperature_is_signed(self) -> None:
         reg = ALL_REGISTERS["battery_temperature"]
+        assert reg.reg_type == "S16"
         assert reg.scale == 0.1
 
-    def test_daily_charge_discharge_have_scaling(self) -> None:
-        for name in ("daily_battery_charge", "daily_battery_discharge"):
-            reg = ALL_REGISTERS[name]
-            assert reg.scale == 0.1
-            assert reg.unit == "kWh"
+    def test_battery_discharge_power_is_u16(self) -> None:
+        reg = ALL_REGISTERS["battery_discharge_power"]
+        assert reg.reg_type == "U16"
+        assert reg.unit == "W"
 
 
 # ===========================================================================
@@ -149,23 +143,28 @@ class TestBatteryRegisters:
 # ===========================================================================
 
 
-class TestLoadRegisters:
-    """AC3: registers.py defines load registers."""
+class TestConsumptionRegisters:
+    """AC3: registers.py defines consumption registers (load, feed-in, battery charge)."""
 
-    def test_load_registers_present(self) -> None:
+    def test_consumption_registers_present(self) -> None:
         names = _all_register_names()
-        for reg_name in LOAD_REGISTER_NAMES:
-            assert reg_name in names, f"Load register '{reg_name}' missing"
+        for reg_name in CONSUMPTION_REGISTER_NAMES:
+            assert reg_name in names, f"Consumption register '{reg_name}' missing"
 
     def test_load_power_is_signed_32(self) -> None:
         reg = ALL_REGISTERS["load_power"]
         assert reg.reg_type == "S32"
         assert reg.unit == "W"
 
-    def test_daily_direct_consumption_has_scaling(self) -> None:
-        reg = ALL_REGISTERS["daily_direct_consumption"]
-        assert reg.scale == 0.1
-        assert reg.unit == "kWh"
+    def test_feed_in_power_is_signed_32(self) -> None:
+        reg = ALL_REGISTERS["feed_in_power"]
+        assert reg.reg_type == "S32"
+        assert reg.unit == "W"
+
+    def test_battery_charge_power_is_u16(self) -> None:
+        reg = ALL_REGISTERS["battery_charge_power"]
+        assert reg.reg_type == "U16"
+        assert reg.unit == "W"
 
 
 # ===========================================================================
@@ -184,10 +183,6 @@ class TestGridRegisters:
     def test_export_power_is_s32(self) -> None:
         reg = ALL_REGISTERS["export_power"]
         assert reg.reg_type == "S32"
-        assert reg.unit == "W"
-
-    def test_grid_power_is_signed(self) -> None:
-        reg = ALL_REGISTERS["grid_power"]
         assert reg.unit == "W"
 
 
