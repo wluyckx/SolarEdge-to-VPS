@@ -13,8 +13,7 @@ This is a pure function: no side effects, no I/O, no clock.  The device_id
 and timestamp are accepted as parameters so they can be injected by the caller.
 
 CHANGELOG:
-- 2026-02-17: Compute battery_power_w from charge/discharge registers (register fix)
-- 2026-02-17: Change export fallback from -grid_power to feed_in_power (register fix)
+- 2026-02-18: Revert to battery_power single register and -grid_power fallback
 - 2026-02-14: Add S32 fallback decoder for devices exposing legacy S16 in low word
 - 2026-02-14: Fallback export_power_w to -grid_power when export register is missing
 - 2026-02-14: Fix contract to accept poller's dict[str, list[int]] format
@@ -44,7 +43,7 @@ logger = logging.getLogger(__name__)
 _FIELD_MAP: dict[str, str] = {
     "pv_power_w": "total_dc_power",
     "pv_daily_kwh": "daily_pv_generation",
-    # battery_power_w is computed from battery_charge_power - battery_discharge_power
+    "battery_power_w": "battery_power",
     "battery_soc_pct": "battery_soc",
     "battery_temp_c": "battery_temperature",
     "load_power_w": "load_power",
@@ -215,15 +214,16 @@ def normalize(
             return None
 
         # Some inverters do not expose export_power (register 5083).
-        # Use feed_in_power fallback (same sign convention: positive = exporting).
+        # Use grid_power fallback (positive import / negative export), so
+        # export_power_w = -grid_power.
         if field_name == "export_power_w" and reg_name not in raw:
-            feed_in_reg = ALL_REGISTERS.get("feed_in_power")
-            if feed_in_reg is not None:
-                feed_in_value = _extract_value(feed_in_reg, raw)
-                if feed_in_value is not None:
-                    fields[field_name] = feed_in_value
+            grid_reg = ALL_REGISTERS.get("grid_power")
+            if grid_reg is not None:
+                grid_value = _extract_value(grid_reg, raw)
+                if grid_value is not None:
+                    fields[field_name] = -grid_value
                     logger.warning(
-                        "Register '%s' missing; falling back to feed_in_power",
+                        "Register '%s' missing; falling back to -grid_power",
                         reg_name,
                     )
                     continue
@@ -233,19 +233,6 @@ def normalize(
             return None
 
         fields[field_name] = value
-
-    # Compute battery_power_w from separate charge and discharge registers.
-    # Sign convention: positive = charging, negative = discharging.
-    charge_reg = ALL_REGISTERS.get("battery_charge_power")
-    discharge_reg = ALL_REGISTERS.get("battery_discharge_power")
-    if charge_reg is None or discharge_reg is None:
-        logger.warning("battery_charge_power or battery_discharge_power register not found")
-        return None
-    charge_val = _extract_value(charge_reg, raw)
-    discharge_val = _extract_value(discharge_reg, raw)
-    if charge_val is None or discharge_val is None:
-        return None
-    fields["battery_power_w"] = charge_val - discharge_val
 
     return SungrowSample(
         device_id=device_id,
