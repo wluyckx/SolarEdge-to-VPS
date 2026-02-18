@@ -15,6 +15,23 @@ References:
     - https://github.com/bohdan-s/SunGather
 
 CHANGELOG:
+- 2026-02-18: Replace battery_power source: 13022 (S16 scale=10) → 5213 (S16 scale=-1).
+  13022 is battery current (0.1 A/LSB), not power; scale=10 only approximated watts at
+  ~100V battery voltage. Register 5213 S16 confirmed as signed battery power via
+  reconcile: raw negative = charging, raw positive = discharging. scale=-1 maps to
+  dashboard convention (positive = charging). Confirmed vs HA: 5213 ≈ -1373 to -1416
+  while HA reports +1353 W charging (2% off). New BATTERY_POWER_GROUP at 5213.
+  BATTERY_GROUP now starts at 13023 (SOC, temp, daily energy).
+- 2026-02-18: Fix load_power address 13008→13007 and type S32→U16. The S32 pair is
+  word-swapped (low word at 13007, high word at 13008); since load never exceeds 32767 W
+  on this 4 kW inverter the high word is always 0. Previous address caused always-zero reads
+  because the poller was reading [13008, 13009] = [0, 0]. LOAD_GROUP start 13008→13007,
+  count 10→11. Confirmed by reconcile: 13007 word ≈ house load (283-296 W observed).
+- 2026-02-18: Remove EXPORT_GROUP (5083-5084) — confirmed ILLEGAL DATA ADDRESS (exception 2)
+  on this WiNet-S firmware. Export power will come from 13009-13010 or P1 meter instead.
+- 2026-02-18: Replace total_dc_power (5004 U32, always reads 1) with pv_power (5016 U16,
+  scale=1). Fix battery_power scale 1→10 (raw=10 matches HA 100W). Restructure PV_GROUP
+  to start at 5011 (drop dead 5004-5010 prefix). Confirmed by register-vs-HA reconcile.
 - 2026-02-18: Revert register addresses to original 13008-13027 — addresses 13119-13150
   (GoSungrow p-codes) are cloud API parameter IDs, not Modbus register addresses.
   WiNet-S returns Modbus error for 13119+ range. Original addresses read successfully.
@@ -143,15 +160,6 @@ DEVICE_GROUP = RegisterGroup(
 
 _PV_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=5004,
-        name="total_dc_power",
-        reg_type="U32",
-        unit="W",
-        scale=1,
-        valid_range=(0, 20000),
-        description="Current total DC power from all MPPT inputs",
-    ),
-    RegisterDef(
         address=5011,
         name="daily_pv_generation",
         reg_type="U16",
@@ -197,6 +205,15 @@ _PV_REGISTERS: list[RegisterDef] = [
         description="MPPT 2 DC current",
     ),
     RegisterDef(
+        address=5016,
+        name="pv_power",
+        reg_type="U16",
+        unit="W",
+        scale=1,
+        valid_range=(0, 20000),
+        description="AC-side PV output power (confirmed via register-vs-HA reconcile 2026-02-18)",
+    ),
+    RegisterDef(
         address=5017,
         name="total_pv_generation",
         reg_type="U32",
@@ -209,50 +226,28 @@ _PV_REGISTERS: list[RegisterDef] = [
 
 PV_GROUP = RegisterGroup(
     group_name="pv",
-    start_address=5004,
-    count=15,  # 5004..5018 inclusive = 15 words
+    start_address=5011,
+    count=8,  # 5011..5018 inclusive = 8 words
     registers=_PV_REGISTERS,
 )
 
 # ---------------------------------------------------------------------------
-# Export / grid estimate group (addresses 5083-5084)
-# ---------------------------------------------------------------------------
-
-_EXPORT_REGISTERS: list[RegisterDef] = [
-    RegisterDef(
-        address=5083,
-        name="export_power",
-        reg_type="S32",
-        unit="W",
-        scale=1,
-        valid_range=(-20000, 20000),
-        description=(
-            "Inverter-estimated export power. "
-            "Positive = exporting to grid, negative = importing."
-        ),
-    ),
-]
-
-EXPORT_GROUP = RegisterGroup(
-    group_name="export",
-    start_address=5083,
-    count=2,  # S32 = 2 words
-    registers=_EXPORT_REGISTERS,
-)
-
-# ---------------------------------------------------------------------------
-# Load / consumption group (addresses 13008-13017)
+# Load / consumption group (addresses 13007-13017)
 # ---------------------------------------------------------------------------
 
 _LOAD_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=13008,
+        address=13007,
         name="load_power",
-        reg_type="S32",
+        reg_type="U16",
         unit="W",
         scale=1,
-        valid_range=(-20000, 50000),
-        description="Total house load consumption (two registers)",
+        valid_range=(0, 20000),
+        description=(
+            "Total house load consumption. "
+            "Word-swapped S32 pair at 13007-13008; low word (13007) holds the value "
+            "for all practical loads on this 4 kW inverter (confirmed 2026-02-18)."
+        ),
     ),
     RegisterDef(
         address=13010,
@@ -262,7 +257,8 @@ _LOAD_REGISTERS: list[RegisterDef] = [
         scale=1,
         valid_range=(-20000, 20000),
         description=(
-            "Inverter-estimated grid power. Positive = importing, negative = exporting."
+            "Inverter-estimated grid power. Positive = importing, negative = exporting. "
+            "Always reads 0 on this WiNet-S firmware — use P1 meter instead."
         ),
     ),
     RegisterDef(
@@ -278,25 +274,55 @@ _LOAD_REGISTERS: list[RegisterDef] = [
 
 LOAD_GROUP = RegisterGroup(
     group_name="load",
-    start_address=13008,
-    count=10,  # 13008..13017 inclusive = 10 words
+    start_address=13007,
+    count=11,  # 13007..13017 inclusive = 11 words
     registers=_LOAD_REGISTERS,
 )
 
 # ---------------------------------------------------------------------------
-# Battery group (addresses 13022-13027)
+# Battery power register (address 5213)
+#
+# Register 5213 is a 2-word block (5213-5214), but only the first word carries
+# the battery power as a signed 16-bit value:
+#   - Negative raw value → battery is charging
+#   - Positive raw value → battery is discharging
+# Applying scale=-1 flips the sign so the output follows the dashboard
+# convention (positive = charging, negative = discharging).
+# Confirmed 2026-02-18: raw ≈ -1370 to -1416 while HA reports +1353 W charging.
+# Address 13021 (= |5213 S16| always) corroborates magnitude.
 # ---------------------------------------------------------------------------
 
-_BATTERY_REGISTERS: list[RegisterDef] = [
+_BATTERY_POWER_REGISTERS: list[RegisterDef] = [
     RegisterDef(
-        address=13022,
+        address=5213,
         name="battery_power",
         reg_type="S16",
         unit="W",
-        scale=1,
+        scale=-1,
         valid_range=(-10000, 10000),
-        description="Battery power. Positive = charging, negative = discharging.",
+        description=(
+            "Battery power. Positive = charging, negative = discharging. "
+            "Raw sign is inverted (negative raw = charging); scale=-1 corrects this. "
+            "Confirmed 2026-02-18 via register-vs-HA reconcile."
+        ),
     ),
+]
+
+BATTERY_POWER_GROUP = RegisterGroup(
+    group_name="battery_power",
+    start_address=5213,
+    count=1,  # only the first word (S16) is used
+    registers=_BATTERY_POWER_REGISTERS,
+)
+
+# ---------------------------------------------------------------------------
+# Battery status group (addresses 13023-13027)
+# SOC, temperature, daily energy counters.
+# Note: 13022 (previously mapped as battery_power) is battery current
+# (0.1 A/LSB); it is NOT included here. Use BATTERY_POWER_GROUP instead.
+# ---------------------------------------------------------------------------
+
+_BATTERY_REGISTERS: list[RegisterDef] = [
     RegisterDef(
         address=13023,
         name="battery_soc",
@@ -337,8 +363,8 @@ _BATTERY_REGISTERS: list[RegisterDef] = [
 
 BATTERY_GROUP = RegisterGroup(
     group_name="battery",
-    start_address=13022,
-    count=6,  # 13022..13027 inclusive = 6 words
+    start_address=13023,
+    count=5,  # 13023..13027 inclusive = 5 words
     registers=_BATTERY_REGISTERS,
 )
 
@@ -349,7 +375,7 @@ BATTERY_GROUP = RegisterGroup(
 ALL_GROUPS: list[RegisterGroup] = [
     DEVICE_GROUP,
     PV_GROUP,
-    EXPORT_GROUP,
+    BATTERY_POWER_GROUP,
     LOAD_GROUP,
     BATTERY_GROUP,
 ]

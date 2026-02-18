@@ -13,6 +13,12 @@ This is a pure function: no side effects, no I/O, no clock.  The device_id
 and timestamp are accepted as parameters so they can be injected by the caller.
 
 CHANGELOG:
+- 2026-02-18: Fix export_power_w fallback to trigger when register def is absent from
+  ALL_REGISTERS (not just absent from raw). Previously the "reg_def is None → return None"
+  guard fired before the fallback could run, causing normalize() to always return None
+  after EXPORT_GROUP was removed from registers.py. Now export_power_w = -grid_power
+  (= 0 on this firmware) regardless of whether export_power is in ALL_REGISTERS.
+- 2026-02-18: Map pv_power_w to new pv_power register (5016) replacing total_dc_power (5004)
 - 2026-02-18: Revert to battery_power single register and -grid_power fallback
 - 2026-02-14: Add S32 fallback decoder for devices exposing legacy S16 in low word
 - 2026-02-14: Fallback export_power_w to -grid_power when export register is missing
@@ -41,7 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _FIELD_MAP: dict[str, str] = {
-    "pv_power_w": "total_dc_power",
+    "pv_power_w": "pv_power",
     "pv_daily_kwh": "daily_pv_generation",
     "battery_power_w": "battery_power",
     "battery_soc_pct": "battery_soc",
@@ -209,24 +215,33 @@ def normalize(
 
     for field_name, reg_name in _FIELD_MAP.items():
         reg_def = ALL_REGISTERS.get(reg_name)
+
+        # export_power has no dedicated register on this firmware (5083 returns
+        # ILLEGAL DATA ADDRESS).  Derive from grid_power regardless of whether
+        # the export_power register def exists or whether it appears in raw.
+        if field_name == "export_power_w":
+            if reg_def is None or reg_name not in raw:
+                grid_reg = ALL_REGISTERS.get("grid_power")
+                if grid_reg is not None:
+                    grid_value = _extract_value(grid_reg, raw)
+                    if grid_value is not None:
+                        fields[field_name] = -grid_value
+                        logger.debug(
+                            "Register '%s' unavailable; using -grid_power fallback",
+                            reg_name,
+                        )
+                        continue
+                # grid_power also unavailable — export unknown, treat as 0
+                fields[field_name] = 0.0
+                logger.warning(
+                    "Register '%s' and grid_power both unavailable; export_power_w = 0",
+                    reg_name,
+                )
+                continue
+
         if reg_def is None:
             logger.warning("Register '%s' not found in ALL_REGISTERS", reg_name)
             return None
-
-        # Some inverters do not expose export_power (register 5083).
-        # Use grid_power fallback (positive import / negative export), so
-        # export_power_w = -grid_power.
-        if field_name == "export_power_w" and reg_name not in raw:
-            grid_reg = ALL_REGISTERS.get("grid_power")
-            if grid_reg is not None:
-                grid_value = _extract_value(grid_reg, raw)
-                if grid_value is not None:
-                    fields[field_name] = -grid_value
-                    logger.warning(
-                        "Register '%s' missing; falling back to -grid_power",
-                        reg_name,
-                    )
-                    continue
 
         value = _extract_value(reg_def, raw)
         if value is None:
