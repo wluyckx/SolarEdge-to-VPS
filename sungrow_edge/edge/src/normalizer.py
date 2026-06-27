@@ -57,6 +57,25 @@ _FIELD_MAP: dict[str, str] = {
 }
 """Maps SungrowSample field name -> register name in ALL_REGISTERS."""
 
+# Optional cumulative-energy fields. Each maps to an ordered tuple of candidate
+# register names; the first one that exists and reads validly wins. Unlike the
+# required _FIELD_MAP, a missing/invalid optional register sets the field to
+# None instead of dropping the whole sample, so it can never break the VPS path.
+# Candidate ordering tolerates the dev/deployed register-map drift (deployed has
+# total_* lifetime counters; dev has daily_* counters).
+_OPTIONAL_FIELD_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "pv_total_kwh": ("total_pv_generation",),
+    "battery_discharge_total_kwh": (
+        "total_battery_discharge",
+        "daily_battery_discharge",
+    ),
+    "battery_charge_total_kwh": (
+        "total_battery_charge",
+        "daily_battery_charge",
+    ),
+}
+"""Maps optional SungrowSample field -> ordered candidate register names."""
+
 
 # ---------------------------------------------------------------------------
 # Type conversion helpers
@@ -249,8 +268,24 @@ def normalize(
 
         fields[field_name] = value
 
+    # Best-effort optional cumulative-energy fields. A missing or out-of-range
+    # optional register yields None for that field rather than dropping the
+    # whole sample (which would also starve the VPS upload path).
+    optional: dict[str, float | None] = {}
+    for opt_name, candidates in _OPTIONAL_FIELD_CANDIDATES.items():
+        optional[opt_name] = None
+        for reg_name in candidates:
+            reg_def = ALL_REGISTERS.get(reg_name)
+            if reg_def is None or reg_name not in raw:
+                continue
+            value = _extract_value(reg_def, raw)
+            if value is not None:
+                optional[opt_name] = value
+                break
+
     return SungrowSample(
         device_id=device_id,
         ts=ts,
         **fields,
+        **optional,
     )

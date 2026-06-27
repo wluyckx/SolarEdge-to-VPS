@@ -55,6 +55,17 @@ class EdgeSettings(BaseSettings):
     raw_debug_enabled: bool = False
     raw_debug_every_n_polls: int = 60
 
+    # --- Home Assistant local-MQTT publishing (opt-in; off by default) ---
+    # When disabled the daemon behaves exactly as before — no broker
+    # connection, no behaviour change to the VPS upload path.
+    mqtt_enabled: bool = False
+    mqtt_host: str = "core-mosquitto"
+    mqtt_port: int = 1883
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+    mqtt_discovery_prefix: str = "homeassistant"
+    mqtt_base_topic: str = "sungrow_edge"
+
     @model_validator(mode="after")
     def _default_device_id(self) -> "EdgeSettings":
         """Default device_id to sungrow_host when not explicitly set."""
@@ -102,6 +113,14 @@ class EdgeSettings(BaseSettings):
         """Validate Modbus TCP port is in valid range."""
         if v < 1 or v > 65535:
             raise ValueError("SUNGROW_PORT must be between 1 and 65535")
+        return v
+
+    @field_validator("mqtt_port")
+    @classmethod
+    def mqtt_port_must_be_valid(cls, v: int) -> int:
+        """Validate MQTT TCP port is in valid range."""
+        if v < 1 or v > 65535:
+            raise ValueError("MQTT_PORT must be between 1 and 65535")
         return v
 
     @field_validator("sungrow_slave_id")

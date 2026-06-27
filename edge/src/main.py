@@ -40,6 +40,7 @@ from edge.src.health import HealthWriter
 from edge.src.normalizer import normalize
 
 if TYPE_CHECKING:
+    from edge.src.mqtt_publisher import MqttPublisher
     from edge.src.poller import Poller
     from edge.src.spool import Spool
     from edge.src.uploader import Uploader
@@ -100,7 +101,8 @@ def log_config_summary(settings: object) -> None:
         "poll_interval_s=%s, upload_interval_s=%s, "
         "inter_register_delay_ms=%s, batch_size=%s, "
         "spool_path=%s, device_id=%s, vps_base_url=%s, "
-        "raw_debug_enabled=%s, raw_debug_every_n_polls=%s",
+        "raw_debug_enabled=%s, raw_debug_every_n_polls=%s, "
+        "mqtt_enabled=%s, mqtt_host=%s, mqtt_port=%s",
         settings.sungrow_host,  # type: ignore[union-attr]
         settings.sungrow_port,  # type: ignore[union-attr]
         settings.sungrow_slave_id,  # type: ignore[union-attr]
@@ -113,6 +115,9 @@ def log_config_summary(settings: object) -> None:
         settings.vps_base_url,  # type: ignore[union-attr]
         settings.raw_debug_enabled,  # type: ignore[union-attr]
         settings.raw_debug_every_n_polls,  # type: ignore[union-attr]
+        settings.mqtt_enabled,  # type: ignore[union-attr]
+        settings.mqtt_host,  # type: ignore[union-attr]
+        settings.mqtt_port,  # type: ignore[union-attr]
     )
 
 
@@ -143,6 +148,7 @@ async def _poll_once(
     spool: Spool,
     device_id: str,
     health: HealthWriter | None,
+    publisher: MqttPublisher | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
     raw_debug_state: list[int] | None = None,
@@ -174,6 +180,17 @@ async def _poll_once(
             if sample is not None:
                 await spool.enqueue(sample.model_dump_json())
                 logger.info("Poll success: enqueued sample for device=%s", device_id)
+                # Best-effort HA fan-out. Isolated so an MQTT failure can never
+                # affect the spool/VPS upload path (the sample is already
+                # enqueued above).
+                if publisher is not None:
+                    try:
+                        await publisher.publish(sample)
+                    except Exception:
+                        logger.warning(
+                            "MQTT publish failed (non-fatal; VPS path unaffected)",
+                            exc_info=True,
+                        )
             else:
                 logger.warning("Normalizer returned None, skipping enqueue")
         else:
@@ -237,6 +254,7 @@ async def _poll_loop(
     poll_interval_s: float,
     shutdown_event: asyncio.Event,
     health: HealthWriter | None,
+    publisher: MqttPublisher | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
 ) -> None:
@@ -261,6 +279,7 @@ async def _poll_loop(
             spool=spool,
             device_id=device_id,
             health=health,
+            publisher=publisher,
             raw_debug_enabled=raw_debug_enabled,
             raw_debug_every_n_polls=raw_debug_every_n_polls,
             raw_debug_state=raw_debug_state,
@@ -321,6 +340,7 @@ async def run_loops(
     upload_interval_s: float,
     shutdown_event: asyncio.Event,
     health: HealthWriter | None = None,
+    publisher: MqttPublisher | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
 ) -> None:
@@ -350,6 +370,7 @@ async def run_loops(
             poll_interval_s=poll_interval_s,
             shutdown_event=shutdown_event,
             health=health,
+            publisher=publisher,
             raw_debug_enabled=raw_debug_enabled,
             raw_debug_every_n_polls=raw_debug_every_n_polls,
         ),
@@ -412,19 +433,41 @@ async def async_main() -> None:
 
     health = HealthWriter("/data/health.json")
 
-    async with Spool(settings.spool_path) as spool:
-        await run_loops(
-            poller=poller,
-            spool=spool,
-            uploader=uploader,
+    # Optional HA local-MQTT fan-out (off unless mqtt_enabled). Built and
+    # started here; passed into the poll loop for best-effort publishing.
+    publisher: MqttPublisher | None = None
+    if settings.mqtt_enabled:
+        from edge.src.mqtt_publisher import MqttPublisher
+
+        publisher = MqttPublisher(
+            host=settings.mqtt_host,
+            port=settings.mqtt_port,
+            username=settings.mqtt_username,
+            password=settings.mqtt_password,
+            discovery_prefix=settings.mqtt_discovery_prefix,
+            base_topic=settings.mqtt_base_topic,
             device_id=settings.device_id,
-            poll_interval_s=settings.poll_interval_s,
-            upload_interval_s=settings.upload_interval_s,
-            shutdown_event=shutdown_event,
-            health=health,
-            raw_debug_enabled=settings.raw_debug_enabled,
-            raw_debug_every_n_polls=settings.raw_debug_every_n_polls,
         )
+        publisher.start()
+
+    try:
+        async with Spool(settings.spool_path) as spool:
+            await run_loops(
+                poller=poller,
+                spool=spool,
+                uploader=uploader,
+                device_id=settings.device_id,
+                poll_interval_s=settings.poll_interval_s,
+                upload_interval_s=settings.upload_interval_s,
+                shutdown_event=shutdown_event,
+                health=health,
+                publisher=publisher,
+                raw_debug_enabled=settings.raw_debug_enabled,
+                raw_debug_every_n_polls=settings.raw_debug_every_n_polls,
+            )
+    finally:
+        if publisher is not None:
+            publisher.stop()
 
 
 def _handle_signal(shutdown_event: asyncio.Event) -> None:

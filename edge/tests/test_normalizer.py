@@ -437,3 +437,43 @@ class TestPollerNormalizerIntegration:
         assert result.battery_temp_c == pytest.approx(23.0)
         assert result.load_power_w == 1500.0
         assert result.export_power_w == 800.0
+
+
+# ===========================================================================
+# Optional cumulative-energy fields (HA Energy Dashboard)
+# ===========================================================================
+
+
+class TestOptionalEnergyFields:
+    """Optional fields are best-effort: present when readable, None otherwise,
+    and a missing/invalid optional register never drops the whole sample."""
+
+    def test_absent_optional_registers_default_to_none(self) -> None:
+        """Base raw has no cumulative registers -> optionals are None, but the
+        sample is still produced (required fields all present)."""
+        result = normalize(_make_raw(), device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.pv_total_kwh is None
+        assert result.battery_discharge_total_kwh is None
+        assert result.battery_charge_total_kwh is None
+
+    def test_present_optional_registers_are_populated(self) -> None:
+        raw = _make_raw(
+            total_pv_generation=[0x0000, 1000],  # U32 * 0.1 = 100.0 kWh
+            daily_battery_discharge=[50],  # U16 * 0.1 = 5.0 kWh
+            daily_battery_charge=[40],  # U16 * 0.1 = 4.0 kWh
+        )
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.pv_total_kwh == pytest.approx(100.0)
+        assert result.battery_discharge_total_kwh == pytest.approx(5.0)
+        assert result.battery_charge_total_kwh == pytest.approx(4.0)
+
+    def test_invalid_optional_register_does_not_drop_sample(self) -> None:
+        """An out-of-range optional value yields None for that field but the
+        sample (and the required fields) survive."""
+        raw = _make_raw(daily_battery_discharge=[5000])  # *0.1 = 500 > max 100
+        result = normalize(raw, device_id=_DEVICE_ID, ts=_TS)
+        assert result is not None
+        assert result.battery_discharge_total_kwh is None
+        assert result.pv_power_w == 1000.0  # required fields intact

@@ -3,3 +3,4 @@ pydantic
 pydantic-settings
 pymodbus
 aiosqlite
+paho-mqtt>=2.0

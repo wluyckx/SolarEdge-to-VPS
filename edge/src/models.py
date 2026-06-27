@@ -49,3 +49,15 @@ class SungrowSample(BaseModel):
     battery_temp_c: float
     load_power_w: float
     export_power_w: float
+
+    # Best-effort cumulative-energy fields for Home Assistant's Energy
+    # Dashboard. Optional (default None) so a missing/unsupported register
+    # never gates sample creation and therefore can never break the VPS
+    # upload path. Where available these are total_increasing kWh counters:
+    #   pv_total_kwh                 -- lifetime PV generation
+    #   battery_discharge_total_kwh  -- lifetime battery discharge
+    #   battery_charge_total_kwh     -- lifetime battery charge (None on
+    #                                   firmwares without a working register)
+    pv_total_kwh: float | None = None
+    battery_discharge_total_kwh: float | None = None
+    battery_charge_total_kwh: float | None = None

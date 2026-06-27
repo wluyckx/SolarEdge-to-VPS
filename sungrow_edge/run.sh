@@ -18,4 +18,17 @@ if bashio::config.has_value 'device_id'; then
   export DEVICE_ID="$(bashio::config 'device_id')"
 fi
 
+# --- Home Assistant local-MQTT publishing (opt-in) ---
+export MQTT_ENABLED="$(bashio::config 'mqtt_enabled')"
+export MQTT_HOST="$(bashio::config 'mqtt_host')"
+export MQTT_PORT="$(bashio::config 'mqtt_port')"
+export MQTT_DISCOVERY_PREFIX="$(bashio::config 'mqtt_discovery_prefix')"
+export MQTT_BASE_TOPIC="$(bashio::config 'mqtt_base_topic')"
+if bashio::config.has_value 'mqtt_username'; then
+  export MQTT_USERNAME="$(bashio::config 'mqtt_username')"
+fi
+if bashio::config.has_value 'mqtt_password'; then
+  export MQTT_PASSWORD="$(bashio::config 'mqtt_password')"
+fi
+
 exec python -m edge.src.main
