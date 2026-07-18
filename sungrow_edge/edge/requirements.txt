@@ -4,3 +4,5 @@ pydantic-settings
 pymodbus
 aiosqlite
 paho-mqtt>=2.0
+fastapi
+uvicorn

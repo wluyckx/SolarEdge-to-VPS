@@ -4,6 +4,10 @@ Tests for Sungrow Modbus register map.
 Verifies register map integrity, consistency, and grouping for batched reads.
 
 CHANGELOG:
+- 2026-07-18: Updated to the field-verified register map (2026-02-18 reconcile):
+  pv_power U16 replaces total_dc_power U32, load_power U16, battery_voltage +
+  total_battery_discharge replace daily charge/discharge counters, export_power
+  register removed, battery_power scale=-1 allowed
 - 2026-02-14: Initial creation — TDD tests written first (STORY-002)
 
 TODO:
@@ -24,7 +28,7 @@ from edge.src.registers import (
 # ---------------------------------------------------------------------------
 
 PV_REGISTER_NAMES = {
-    "total_dc_power",
+    "pv_power",
     "daily_pv_generation",
     "total_pv_generation",
     "mppt1_voltage",
@@ -36,9 +40,9 @@ PV_REGISTER_NAMES = {
 BATTERY_REGISTER_NAMES = {
     "battery_power",
     "battery_soc",
+    "battery_voltage",
     "battery_temperature",
-    "daily_battery_charge",
-    "daily_battery_discharge",
+    "total_battery_discharge",
 }
 
 LOAD_REGISTER_NAMES = {
@@ -47,7 +51,6 @@ LOAD_REGISTER_NAMES = {
 }
 
 GRID_REGISTER_NAMES = {
-    "export_power",
     "grid_power",
 }
 
@@ -82,10 +85,11 @@ class TestPVRegisters:
         for reg_name in PV_REGISTER_NAMES:
             assert reg_name in names, f"PV register '{reg_name}' missing"
 
-    def test_total_dc_power_is_u32(self) -> None:
-        reg = ALL_REGISTERS["total_dc_power"]
-        assert reg.reg_type == "U32"
+    def test_pv_power_is_u16(self) -> None:
+        reg = ALL_REGISTERS["pv_power"]
+        assert reg.reg_type == "U16"
         assert reg.unit == "W"
+        assert reg.scale == 1
 
     def test_daily_pv_generation_has_scaling(self) -> None:
         reg = ALL_REGISTERS["daily_pv_generation"]
@@ -137,11 +141,15 @@ class TestBatteryRegisters:
         reg = ALL_REGISTERS["battery_temperature"]
         assert reg.scale == 0.1
 
-    def test_daily_charge_discharge_have_scaling(self) -> None:
-        for name in ("daily_battery_charge", "daily_battery_discharge"):
-            reg = ALL_REGISTERS[name]
-            assert reg.scale == 0.1
-            assert reg.unit == "kWh"
+    def test_total_battery_discharge_has_scaling(self) -> None:
+        reg = ALL_REGISTERS["total_battery_discharge"]
+        assert reg.scale == 0.1
+        assert reg.unit == "kWh"
+
+    def test_battery_voltage_has_scaling(self) -> None:
+        reg = ALL_REGISTERS["battery_voltage"]
+        assert reg.scale == 0.1
+        assert reg.unit == "V"
 
 
 # ===========================================================================
@@ -157,9 +165,10 @@ class TestLoadRegisters:
         for reg_name in LOAD_REGISTER_NAMES:
             assert reg_name in names, f"Load register '{reg_name}' missing"
 
-    def test_load_power_is_signed_32(self) -> None:
+    def test_load_power_is_u16(self) -> None:
+        """Word-swapped S32 pair on this firmware; low word alone is used."""
         reg = ALL_REGISTERS["load_power"]
-        assert reg.reg_type == "S32"
+        assert reg.reg_type == "U16"
         assert reg.unit == "W"
 
     def test_daily_direct_consumption_has_scaling(self) -> None:
@@ -181,10 +190,10 @@ class TestGridRegisters:
         for reg_name in GRID_REGISTER_NAMES:
             assert reg_name in names, f"Grid register '{reg_name}' missing"
 
-    def test_export_power_is_s32(self) -> None:
-        reg = ALL_REGISTERS["export_power"]
-        assert reg.reg_type == "S32"
-        assert reg.unit == "W"
+    def test_export_power_absent(self) -> None:
+        """5083 returns ILLEGAL DATA ADDRESS on this WiNet-S firmware;
+        export is derived as -grid_power in the normalizer instead."""
+        assert "export_power" not in ALL_REGISTERS
 
     def test_grid_power_is_signed(self) -> None:
         reg = ALL_REGISTERS["grid_power"]
@@ -241,10 +250,13 @@ class TestRegisterFields:
                         f"{reg.name}: valid_range must be (min, max)"
                     )
 
-    def test_scaling_factors_are_positive_numbers(self) -> None:
+    def test_scaling_factors_are_nonzero(self) -> None:
+        """Scale must be nonzero; battery_power legitimately uses -1 to flip
+        the raw sign convention (raw negative = charging)."""
         for group in ALL_GROUPS:
             for reg in group.registers:
-                assert reg.scale > 0, f"{reg.name}: scale must be > 0, got {reg.scale}"
+                assert reg.scale != 0, f"{reg.name}: scale must be nonzero"
+        assert ALL_REGISTERS["battery_power"].scale == -1
 
     def test_valid_range_min_less_than_max(self) -> None:
         for group in ALL_GROUPS:

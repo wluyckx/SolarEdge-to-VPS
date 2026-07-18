@@ -78,7 +78,7 @@ class EdgeSettings(BaseSettings):
     control_max_charge_w: int = 4000
     control_max_discharge_w: int = 6600
     control_min_soc_pct: float = 12.0
-    control_max_soc_pct: float = 100.0
+    control_max_soc_pct: float = 95.0
     control_max_ttl_s: int = 21600
     control_state_path: str = "/data/control-state.json"
     control_audit_path: str = "/data/control-audit.jsonl"

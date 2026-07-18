@@ -494,3 +494,8 @@ async def test_audit_records_rejection(tmp_path, fake_client, clock):
     with pytest.raises(ControlError):
         await ctrl.apply(_cmd(mode="discharge"))
     assert any(e["event"] == "command_rejected" for e in _audit_events(tmp_path))
+
+
+def test_default_soc_ceiling_is_95():
+    """LFP calendar-aging default: don't park at 100% unless deliberate."""
+    assert ControlLimits().max_soc_pct == 95.0

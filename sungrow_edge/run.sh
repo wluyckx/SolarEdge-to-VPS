@@ -31,4 +31,12 @@ if bashio::config.has_value 'mqtt_password'; then
   export MQTT_PASSWORD="$(bashio::config 'mqtt_password')"
 fi
 
+# --- Battery control (opt-in; dry-run by default) ---
+export CONTROL_ENABLED="$(bashio::config 'control_enabled')"
+export CONTROL_DRY_RUN="$(bashio::config 'control_dry_run')"
+export CONTROL_API_PORT="$(bashio::config 'control_api_port')"
+if bashio::config.has_value 'control_api_token'; then
+  export CONTROL_API_TOKEN="$(bashio::config 'control_api_token')"
+fi
+
 exec python -m edge.src.main

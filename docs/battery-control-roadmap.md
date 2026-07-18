@@ -84,6 +84,11 @@ Acceptance criteria:
   short, discharge into expensive evening slots capped at house load,
   always leave reserve for peak-guard); evaluate EMHASS or a small LP
   (PuLP/HiGHS) once rules have a baseline.
+- Grid charging must be **peak-constrained, not just price-driven**:
+  charge cap = monthly-peak target − current house load (P1), or a cheap
+  night slot can set a new capacity-tariff peak that outweighs the saving.
+- The objective must include degradation cost (~€0.02–0.05 per kWh
+  cycled) and round-trip losses (~10%) — small spreads are losses.
 - Shadow mode all October: planner publishes its schedule + would-be
   commands to the audit log and a dashboard; compare planned vs actual cost
   weekly. No execution.
@@ -93,6 +98,14 @@ Acceptance criteria:
 - Nightly plan-vs-actual report; weekly review of savings.
 
 ## Standing risks / open items
+
+- **Warranty check (before November):** read the SBR096 warranty terms for
+  an energy-throughput / MWh cap — arbitrage roughly doubles annual
+  cycling, which halves the years to any such cap. Confirm operating via
+  the inverter's EMS registers keeps warranty conditions intact.
+- **SOC ceiling defaults to 95%** (`control_max_soc_pct`) to limit time
+  parked at full charge (LFP calendar aging). Raise deliberately only
+  ahead of known high-price days.
 
 - WiNet-S firmware updates can break Modbus (openHAB #19057: P035 regression).
   Check WiNet auto-update setting; re-run the read/echo-write probe after any

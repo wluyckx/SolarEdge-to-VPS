@@ -29,11 +29,12 @@ CHANGELOG:
   New BATTERY_POWER_GROUP at 5213.
 - 2026-02-18: Fix load_power address 13008→13007 and type S32→U16. The S32 pair is
   word-swapped (low word at 13007, high word at 13008); since load never exceeds 32767 W
-  on this 4 kW inverter the high word is always 0. Previous address caused always-zero reads
-  because the poller was reading [13008, 13009] = [0, 0]. LOAD_GROUP start 13008→13007,
+  on this 4 kW inverter the high word is always 0. Previous address caused
+  always-zero reads (the poller read [13008, 13009] = [0, 0]). LOAD_GROUP 13008→13007,
   count 10→11. Confirmed by reconcile: 13007 word ≈ house load (283-296 W observed).
-- 2026-02-18: Remove EXPORT_GROUP (5083-5084) — confirmed ILLEGAL DATA ADDRESS (exception 2)
-  on this WiNet-S firmware. Export power will come from 13009-13010 or P1 meter instead.
+- 2026-02-18: Remove EXPORT_GROUP (5083-5084) — confirmed ILLEGAL DATA ADDRESS
+  (exception 2) on this WiNet-S firmware. Export power will come from
+  13009-13010 or the P1 meter instead.
 - 2026-02-18: Replace total_dc_power (5004 U32, always reads 1) with pv_power (5016 U16,
   scale=1). Fix battery_power scale 1→10 (raw=10 matches HA 100W). Restructure PV_GROUP
   to start at 5011 (drop dead 5004-5010 prefix). Confirmed by register-vs-HA reconcile.
@@ -216,7 +217,10 @@ _PV_REGISTERS: list[RegisterDef] = [
         unit="W",
         scale=1,
         valid_range=(0, 20000),
-        description="AC-side PV output power (confirmed via register-vs-HA reconcile 2026-02-18)",
+        description=(
+            "AC-side PV output power "
+            "(confirmed via register-vs-HA reconcile 2026-02-18)"
+        ),
     ),
     RegisterDef(
         address=5017,
@@ -262,7 +266,7 @@ _LOAD_REGISTERS: list[RegisterDef] = [
         scale=1,
         valid_range=(-20000, 20000),
         description=(
-            "Inverter-estimated grid power. Positive = importing, negative = exporting. "
+            "Inverter-estimated grid power. Positive = import, negative = export. "
             "Always reads 0 on this WiNet-S firmware — use P1 meter instead."
         ),
     ),
@@ -378,7 +382,9 @@ _BATTERY_REGISTERS: list[RegisterDef] = [
         unit="kWh",
         scale=0.1,
         valid_range=(0, 1_000_000),
-        description="Lifetime accumulated battery discharge energy (2574.1 kWh observed).",
+        description=(
+            "Lifetime accumulated battery discharge energy (2574.1 kWh observed)"
+        ),
     ),
 ]
 

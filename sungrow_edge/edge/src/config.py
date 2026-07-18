@@ -6,6 +6,7 @@ All configuration values come from environment variables or .env files;
 no hardcoded IPs, URLs, or credentials.
 
 CHANGELOG:
+- 2026-07-18: Add battery control settings (opt-in, dry-run by default)
 - 2026-02-14: Add raw debug snapshot configuration for Modbus payload inspection
 - 2026-02-14: Initial creation (STORY-001)
 
@@ -66,12 +67,62 @@ class EdgeSettings(BaseSettings):
     mqtt_discovery_prefix: str = "homeassistant"
     mqtt_base_topic: str = "sungrow_edge"
 
+    # --- Battery control (opt-in; dry-run by default) ---
+    # When control_enabled the daemon exposes the control API and runs the
+    # deadman watchdog. control_dry_run=True audits the full command
+    # lifecycle without ever writing to Modbus.
+    control_enabled: bool = False
+    control_dry_run: bool = True
+    control_api_token: str = ""
+    control_api_port: int = 8402
+    control_max_charge_w: int = 4000
+    control_max_discharge_w: int = 6600
+    control_min_soc_pct: float = 12.0
+    control_max_soc_pct: float = 95.0
+    control_max_ttl_s: int = 21600
+    control_state_path: str = "/data/control-state.json"
+    control_audit_path: str = "/data/control-audit.jsonl"
+
     @model_validator(mode="after")
     def _default_device_id(self) -> "EdgeSettings":
         """Default device_id to sungrow_host when not explicitly set."""
         if not self.device_id:
             self.device_id = self.sungrow_host
         return self
+
+    @model_validator(mode="after")
+    def _control_requires_token(self) -> "EdgeSettings":
+        """An enabled control API without a token would be an open door."""
+        if self.control_enabled and not self.control_api_token:
+            raise ValueError(
+                "CONTROL_API_TOKEN must be set when CONTROL_ENABLED is true"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _control_soc_bounds_sane(self) -> "EdgeSettings":
+        """SOC floor must sit below the ceiling, both within 0-100."""
+        if not (0.0 <= self.control_min_soc_pct < self.control_max_soc_pct <= 100.0):
+            raise ValueError(
+                "CONTROL_MIN_SOC_PCT must be < CONTROL_MAX_SOC_PCT, both in 0-100"
+            )
+        return self
+
+    @field_validator("control_api_port")
+    @classmethod
+    def control_api_port_must_be_valid(cls, v: int) -> int:
+        """Validate control API port is in valid range."""
+        if v < 1 or v > 65535:
+            raise ValueError("CONTROL_API_PORT must be between 1 and 65535")
+        return v
+
+    @field_validator("control_max_ttl_s")
+    @classmethod
+    def control_max_ttl_must_be_sane(cls, v: int) -> int:
+        """TTL ceiling must allow at least the 60s minimum command."""
+        if v < 60:
+            raise ValueError("CONTROL_MAX_TTL_S must be >= 60")
+        return v
 
     @field_validator("vps_base_url")
     @classmethod
