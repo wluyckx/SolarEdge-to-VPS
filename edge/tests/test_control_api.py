@@ -140,3 +140,23 @@ async def test_audit_endpoint_returns_events(tmp_path):
     assert resp.status_code == 200
     events = resp.json()["events"]
     assert any(e["event"] == "command_accepted" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_root_serves_ui_without_token(tmp_path):
+    """GET / is the operator page: public static shell, HTML, no auth."""
+    app, _ = make_app(tmp_path, FakeModbusClient(), FakeClock())
+    async with client_for(app) as c:
+        resp = await c.get("/")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Battery control" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_root_page_contains_no_secrets(tmp_path):
+    """The unauthenticated shell must never embed the API token."""
+    app, _ = make_app(tmp_path, FakeModbusClient(), FakeClock())
+    async with client_for(app) as c:
+        resp = await c.get("/")
+    assert TOKEN not in resp.text

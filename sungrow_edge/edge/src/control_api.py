@@ -6,12 +6,14 @@ Small FastAPI app exposing the SungrowController to LAN/Tailscale clients
 endpoint; validation failures surface as 422 without touching Modbus.
 
 Endpoints:
+    GET  /                -- built-in operator page (public shell, no data)
     GET  /control/status  -- controller state, active command, limits
     POST /control/force   -- charge / discharge / hold (TTL mandatory)
     POST /control/auto    -- revert to inverter self-consumption
     GET  /control/audit   -- tail of the JSONL audit trail
 
 CHANGELOG:
+- 2026-07-18: Serve the built-in operator page at / (public static shell)
 - 2026-07-18: Initial creation -- battery-control Phase 1 (AC6)
 
 TODO:
@@ -25,7 +27,9 @@ import logging
 import secrets
 
 from edge.src.control import CommandRequest, ControlError, SungrowController
+from edge.src.control_ui import PAGE_HTML
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,12 @@ def build_app(controller: SungrowController, *, token: str) -> FastAPI:
         expected = f"Bearer {token}"
         if not secrets.compare_digest(header, expected):
             raise HTTPException(status_code=401, detail="invalid or missing token")
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> HTMLResponse:
+        # Public static shell: contains no data or secrets; every data call
+        # the page makes goes through the bearer-token endpoints below.
+        return HTMLResponse(PAGE_HTML)
 
     @app.get("/control/status", dependencies=[Depends(require_auth)])
     async def get_status() -> dict:
