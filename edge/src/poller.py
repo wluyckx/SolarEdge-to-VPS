@@ -11,6 +11,9 @@ register values as a dict.  Designed to be robust:
 - Logs warnings on errors but never propagates exceptions to the caller.
 
 CHANGELOG:
+- 2026-07-18: Cap backoff exponent (OverflowError after ~276k consecutive
+  failures during the 16-day wrong-IP outage); add optional shared modbus
+  lock so the battery controller's writes never overlap a poll cycle
 - 2026-02-14: Allow polling to continue when optional export group is unsupported
 - 2026-02-14: Initial creation (STORY-003)
 
@@ -120,11 +123,13 @@ class Poller:
         port: int = 502,
         slave_id: int = 1,
         inter_register_delay_ms: int = 20,
+        modbus_lock: asyncio.Lock | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._slave_id = slave_id
         self._inter_register_delay_ms = inter_register_delay_ms
+        self._modbus_lock = modbus_lock
         self._consecutive_failures: int = 0
 
     async def poll(self) -> dict[str, list[int]] | None:
@@ -139,9 +144,12 @@ class Poller:
             or ``None`` on any error.
         """
         # Apply backoff sleep before retrying after previous failures.
+        # The exponent is capped BEFORE 2**n: an unbounded failure count
+        # (weeks of outage) otherwise overflows the int->float conversion.
         if self._consecutive_failures > 0:
+            capped_exponent = min(self._consecutive_failures - 1, 6)
             delay = min(
-                BASE_BACKOFF_S * (2 ** (self._consecutive_failures - 1)),
+                BASE_BACKOFF_S * (2**capped_exponent),
                 MAX_BACKOFF_S,
             )
             logger.warning(
@@ -151,13 +159,28 @@ class Poller:
             )
             await asyncio.sleep(delay)
 
+        if self._modbus_lock is not None:
+            async with self._modbus_lock:
+                result = await self._attempt_poll()
+        else:
+            result = await self._attempt_poll()
+
+        if result is not None:
+            self._consecutive_failures = 0
+        else:
+            self._consecutive_failures += 1
+
+        return result
+
+    async def _attempt_poll(self) -> dict[str, list[int]] | None:
+        """Execute one connect-poll-close attempt. Never raises."""
         client = AsyncModbusTcpClient(
             self._host,
             port=self._port,
             timeout=MODBUS_TIMEOUT_S,
         )
         try:
-            result = await _do_poll(
+            return await _do_poll(
                 client,
                 slave_id=self._slave_id,
                 inter_register_delay_ms=self._inter_register_delay_ms,
@@ -169,16 +192,9 @@ class Poller:
                 self._port,
                 exc_info=True,
             )
-            result = None
+            return None
         finally:
             client.close()
-
-        if result is not None:
-            self._consecutive_failures = 0
-        else:
-            self._consecutive_failures += 1
-
-        return result
 
 
 # ---------------------------------------------------------------------------

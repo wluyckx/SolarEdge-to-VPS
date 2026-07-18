@@ -17,6 +17,8 @@ tracks last_poll_ts, last_upload_ts, and spool_count, writing a JSON health
 file after each state change.
 
 CHANGELOG:
+- 2026-07-18: Wire battery controller (opt-in): SOC observation in the poll
+  path, deadman watchdog task, control API task, revert-on-shutdown
 - 2026-02-14: Add periodic raw register snapshot logging for field diagnostics
 - 2026-02-14: Replace inline health writer with HealthWriter (STORY-015)
 - 2026-02-14: Initial creation (STORY-014)
@@ -40,6 +42,7 @@ from edge.src.health import HealthWriter
 from edge.src.normalizer import normalize
 
 if TYPE_CHECKING:
+    from edge.src.control import SungrowController
     from edge.src.mqtt_publisher import MqttPublisher
     from edge.src.poller import Poller
     from edge.src.spool import Spool
@@ -149,6 +152,7 @@ async def _poll_once(
     device_id: str,
     health: HealthWriter | None,
     publisher: MqttPublisher | None = None,
+    controller: SungrowController | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
     raw_debug_state: list[int] | None = None,
@@ -190,6 +194,15 @@ async def _poll_once(
                         logger.warning(
                             "MQTT publish failed (non-fatal; VPS path unaffected)",
                             exc_info=True,
+                        )
+                # Feed the battery controller's SOC guardrails. Isolated so
+                # a controller error can never affect the telemetry path.
+                if controller is not None:
+                    try:
+                        controller.observe(sample)
+                    except Exception:
+                        logger.warning(
+                            "Controller observe failed (non-fatal)", exc_info=True
                         )
             else:
                 logger.warning("Normalizer returned None, skipping enqueue")
@@ -255,6 +268,7 @@ async def _poll_loop(
     shutdown_event: asyncio.Event,
     health: HealthWriter | None,
     publisher: MqttPublisher | None = None,
+    controller: SungrowController | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
 ) -> None:
@@ -280,6 +294,7 @@ async def _poll_loop(
             device_id=device_id,
             health=health,
             publisher=publisher,
+            controller=controller,
             raw_debug_enabled=raw_debug_enabled,
             raw_debug_every_n_polls=raw_debug_every_n_polls,
             raw_debug_state=raw_debug_state,
@@ -341,6 +356,7 @@ async def run_loops(
     shutdown_event: asyncio.Event,
     health: HealthWriter | None = None,
     publisher: MqttPublisher | None = None,
+    controller: SungrowController | None = None,
     raw_debug_enabled: bool = False,
     raw_debug_every_n_polls: int = 60,
 ) -> None:
@@ -362,7 +378,7 @@ async def run_loops(
     """
     logger.info("Starting concurrent poll and upload loops")
 
-    await asyncio.gather(
+    tasks = [
         _poll_loop(
             poller=poller,
             spool=spool,
@@ -371,6 +387,7 @@ async def run_loops(
             shutdown_event=shutdown_event,
             health=health,
             publisher=publisher,
+            controller=controller,
             raw_debug_enabled=raw_debug_enabled,
             raw_debug_every_n_polls=raw_debug_every_n_polls,
         ),
@@ -381,7 +398,11 @@ async def run_loops(
             shutdown_event=shutdown_event,
             health=health,
         ),
-    )
+    ]
+    if controller is not None:
+        tasks.append(controller.watchdog_loop(shutdown_event))
+
+    await asyncio.gather(*tasks)
 
     # Final upload flush after shutdown
     logger.info("Attempting final upload flush before exit")
@@ -418,11 +439,16 @@ async def async_main() -> None:
             lambda: _handle_signal(shutdown_event),
         )
 
+    # One lock serializes ALL Modbus access (poller reads + controller
+    # writes) — the WiNet-S reliably serves only one client at a time.
+    modbus_lock = asyncio.Lock()
+
     poller = Poller(
         host=settings.sungrow_host,
         port=settings.sungrow_port,
         slave_id=settings.sungrow_slave_id,
         inter_register_delay_ms=settings.inter_register_delay_ms,
+        modbus_lock=modbus_lock,
     )
 
     uploader = Uploader(
@@ -450,6 +476,46 @@ async def async_main() -> None:
         )
         publisher.start()
 
+    # Optional battery control (off unless control_enabled). The controller
+    # shares the modbus lock with the poller and reverts the inverter to
+    # self-consumption on TTL expiry, SOC breach, and daemon shutdown.
+    controller: SungrowController | None = None
+    api_task = None
+    if settings.control_enabled:
+        from edge.src.control import ControlLimits, SungrowController
+        from edge.src.control_api import build_app, serve_api
+
+        controller = SungrowController(
+            host=settings.sungrow_host,
+            port=settings.sungrow_port,
+            slave_id=settings.sungrow_slave_id,
+            limits=ControlLimits(
+                max_charge_w=settings.control_max_charge_w,
+                max_discharge_w=settings.control_max_discharge_w,
+                min_soc_pct=settings.control_min_soc_pct,
+                max_soc_pct=settings.control_max_soc_pct,
+                max_ttl_s=settings.control_max_ttl_s,
+            ),
+            dry_run=settings.control_dry_run,
+            state_path=settings.control_state_path,
+            audit_path=settings.control_audit_path,
+            modbus_lock=modbus_lock,
+        )
+        await controller.reconcile_on_startup()
+        app = build_app(controller, token=settings.control_api_token)
+        api_task = asyncio.get_running_loop().create_task(
+            serve_api(
+                app,
+                port=settings.control_api_port,
+                shutdown_event=shutdown_event,
+            )
+        )
+        logger.info(
+            "Battery control enabled (dry_run=%s, api_port=%s)",
+            settings.control_dry_run,
+            settings.control_api_port,
+        )
+
     try:
         async with Spool(settings.spool_path) as spool:
             await run_loops(
@@ -462,10 +528,16 @@ async def async_main() -> None:
                 shutdown_event=shutdown_event,
                 health=health,
                 publisher=publisher,
+                controller=controller,
                 raw_debug_enabled=settings.raw_debug_enabled,
                 raw_debug_every_n_polls=settings.raw_debug_every_n_polls,
             )
     finally:
+        if controller is not None:
+            await controller.on_shutdown()
+        if api_task is not None:
+            await asyncio.wait([api_task], timeout=5)
+            api_task.cancel()
         if publisher is not None:
             publisher.stop()
 

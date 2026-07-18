@@ -754,3 +754,38 @@ class TestPollerClass:
         # Verify all reads used device_id=7
         for call in client.read_input_registers.call_args_list:
             assert call.kwargs.get("device_id") == 7
+
+
+# ---------------------------------------------------------------------------
+# Backoff overflow regression (2026-07-18)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_backoff_survives_huge_failure_count(monkeypatch):
+    """After weeks of failures 2**n must not overflow float conversion.
+
+    Regression: 16 days of 5s-interval failures (~276k) made
+    ``BASE_BACKOFF_S * 2**(n-1)`` raise OverflowError on every cycle,
+    so the daemon could never recover without a restart.
+    """
+    from edge.src import poller as poller_mod
+    from edge.src.poller import MAX_BACKOFF_S, Poller
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(s: float) -> None:
+        sleeps.append(s)
+
+    monkeypatch.setattr(poller_mod.asyncio, "sleep", fake_sleep)
+
+    async def fake_do_poll(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(poller_mod, "_do_poll", fake_do_poll)
+
+    p = Poller(host="192.0.2.1")
+    p._consecutive_failures = 300_000
+    result = await p.poll()  # must not raise OverflowError
+    assert result is None
+    assert sleeps and sleeps[0] == MAX_BACKOFF_S
