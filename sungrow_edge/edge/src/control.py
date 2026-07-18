@@ -175,7 +175,7 @@ class SungrowController:
 
     def observe(self, sample: Any) -> None:
         """Record telemetry from a normalized SungrowSample (best-effort)."""
-        self.observe_soc(getattr(sample, "battery_soc", None))
+        self.observe_soc(getattr(sample, "battery_soc_pct", None))
 
     # -- public API --------------------------------------------------------
 

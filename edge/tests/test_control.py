@@ -499,3 +499,32 @@ async def test_audit_records_rejection(tmp_path, fake_client, clock):
 def test_default_soc_ceiling_is_95():
     """LFP calendar-aging default: don't park at 100% unless deliberate."""
     assert ControlLimits().max_soc_pct == 95.0
+
+
+def test_observe_reads_sample_soc_field():
+    """observe() must read SungrowSample.battery_soc_pct (regression:
+    it read a nonexistent 'battery_soc' attr, so SOC never arrived and
+    every charge/discharge was rejected as 'no telemetry' in production)."""
+    from datetime import UTC, datetime
+
+    from edge.src.models import SungrowSample
+
+    sample = SungrowSample(
+        device_id="dev-1",
+        ts=datetime(2026, 7, 18, tzinfo=UTC),
+        pv_power_w=0.0,
+        pv_daily_kwh=0.0,
+        battery_power_w=0.0,
+        battery_soc_pct=42.0,
+        battery_temp_c=20.0,
+        load_power_w=0.0,
+        export_power_w=0.0,
+    )
+    ctrl = SungrowController(
+        host="192.0.2.1",
+        state_path="/tmp/obs-state.json",
+        audit_path="/tmp/obs-audit.jsonl",
+        client_factory=lambda: FakeModbusClient(),
+    )
+    ctrl.observe(sample)
+    assert ctrl.status()["last_soc_pct"] == 42.0
