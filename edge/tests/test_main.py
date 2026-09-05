@@ -14,6 +14,7 @@ Tests verify:
 - Startup logs config summary without secrets (AC5).
 
 CHANGELOG:
+- 2026-09-05: Observe SOC before downstream awaits (WIM-ACTION-39).
 - 2026-02-14: Initial creation -- TDD tests written first (STORY-014)
 
 TODO:
@@ -104,6 +105,113 @@ def _make_components() -> dict[str, AsyncMock | MagicMock]:
 # ---------------------------------------------------------------------------
 # Test: poll loop calls poller.poll() -> normalize() -> spool.enqueue()
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_soc_observed_before_spool_or_mqtt_awaits():
+    from edge.src.main import _poll_once
+
+    components = _make_components()
+    sample = _make_sample()
+    controller = MagicMock()
+    publisher = AsyncMock()
+
+    async def assert_already_observed(*args):
+        controller.observe.assert_called_once_with(sample)
+
+    components["spool"].enqueue.side_effect = assert_already_observed
+    publisher.publish.side_effect = assert_already_observed
+    with patch("edge.src.main.normalize", return_value=sample):
+        await _poll_once(
+            poller=components["poller"],
+            spool=components["spool"],
+            device_id="sungrow-test",
+            health=None,
+            controller=controller,
+            publisher=publisher,
+        )
+    publisher.publish.assert_awaited_once_with(sample)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["poll_none", "poll_error", "normalize_none"])
+async def test_failed_poll_cannot_renew_soc_deadline(tmp_path, failure):
+    from edge.src.control import CommandRequest, SungrowController
+    from edge.src.main import _poll_once
+
+    elapsed = [0.0]
+    controller = SungrowController(
+        host="192.0.2.1",
+        dry_run=True,
+        monotonic_fn=lambda: elapsed[0],
+        state_path=str(tmp_path / "state.json"),
+        audit_path=str(tmp_path / "audit.jsonl"),
+    )
+    components = _make_components()
+    sample = _make_sample()
+    with patch("edge.src.main.normalize", return_value=sample) as normalize_mock:
+        await _poll_once(
+            poller=components["poller"],
+            spool=components["spool"],
+            device_id="sungrow-test",
+            health=None,
+            controller=controller,
+        )
+        await controller.apply(
+            CommandRequest(mode="discharge", power_w=1000, ttl_s=900, issuer="test")
+        )
+        elapsed[0] = 10
+        if failure == "poll_none":
+            components["poller"].poll.return_value = None
+        elif failure == "poll_error":
+            components["poller"].poll.side_effect = RuntimeError("poll failed")
+        else:
+            normalize_mock.return_value = None
+        await _poll_once(
+            poller=components["poller"],
+            spool=components["spool"],
+            device_id="sungrow-test",
+            health=None,
+            controller=controller,
+        )
+    elapsed[0] = 15
+    await controller.watchdog_tick()
+    assert controller.status()["active"] is None
+    assert controller.audit_tail()[-1]["reason"] == "stale_telemetry"
+
+
+@pytest.mark.asyncio
+async def test_daemon_sets_soc_deadline_from_poll_interval(monkeypatch):
+    from edge.src.config import EdgeSettings
+    from edge.src.main import async_main
+
+    settings = EdgeSettings(
+        sungrow_host="192.0.2.1",
+        vps_base_url="https://solar.example.com",
+        vps_device_token="test",
+        poll_interval_s=30,
+        control_enabled=True,
+        control_api_token="test",
+        mqtt_enabled=False,
+    )
+    controller = MagicMock()
+    controller.reconcile_on_startup = AsyncMock()
+    controller.on_shutdown = AsyncMock()
+    monkeypatch.setattr(asyncio.get_running_loop(), "add_signal_handler", MagicMock())
+    with (
+        patch("edge.src.main.configure_logging"),
+        patch("edge.src.config.EdgeSettings", return_value=settings),
+        patch("edge.src.poller.Poller"),
+        patch("edge.src.uploader.Uploader"),
+        patch("edge.src.spool.Spool", return_value=_make_components()["spool"]),
+        patch("edge.src.main.HealthWriter"),
+        patch("edge.src.main.run_loops", new_callable=AsyncMock),
+        patch("edge.src.control.SungrowController", return_value=controller) as factory,
+        patch("edge.src.control_api.build_app"),
+        patch("edge.src.control_api.serve_api", new_callable=AsyncMock),
+    ):
+        await async_main()
+    assert factory.call_args.kwargs["soc_max_age_s"] == 90
 
 
 class TestPollLoopHappyPath:

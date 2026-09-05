@@ -17,6 +17,7 @@ tracks last_poll_ts, last_upload_ts, and spool_count, writing a JSON health
 file after each state change.
 
 CHANGELOG:
+- 2026-09-05: Bound SOC age to three polls and observe before I/O (WIM-ACTION-39).
 - 2026-07-18: Wire battery controller (opt-in): SOC observation in the poll
   path, deadman watchdog task, control API task, revert-on-shutdown
 - 2026-02-14: Add periodic raw register snapshot logging for field diagnostics
@@ -182,6 +183,15 @@ async def _poll_once(
             sample = normalize(raw, device_id=device_id, ts=ts)
 
             if sample is not None:
+                # Timestamp SOC before downstream awaits can delay delivery.
+                # A controller failure must not affect telemetry persistence.
+                if controller is not None:
+                    try:
+                        controller.observe(sample)
+                    except Exception:
+                        logger.warning(
+                            "Controller observe failed (non-fatal)", exc_info=True
+                        )
                 await spool.enqueue(sample.model_dump_json())
                 logger.info("Poll success: enqueued sample for device=%s", device_id)
                 # Best-effort HA fan-out. Isolated so an MQTT failure can never
@@ -194,15 +204,6 @@ async def _poll_once(
                         logger.warning(
                             "MQTT publish failed (non-fatal; VPS path unaffected)",
                             exc_info=True,
-                        )
-                # Feed the battery controller's SOC guardrails. Isolated so
-                # a controller error can never affect the telemetry path.
-                if controller is not None:
-                    try:
-                        controller.observe(sample)
-                    except Exception:
-                        logger.warning(
-                            "Controller observe failed (non-fatal)", exc_info=True
                         )
             else:
                 logger.warning("Normalizer returned None, skipping enqueue")
@@ -500,6 +501,7 @@ async def async_main() -> None:
             state_path=settings.control_state_path,
             audit_path=settings.control_audit_path,
             modbus_lock=modbus_lock,
+            soc_max_age_s=3 * settings.poll_interval_s,
         )
         await controller.reconcile_on_startup()
         app = build_app(controller, token=settings.control_api_token)

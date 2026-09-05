@@ -5,7 +5,8 @@ Single writer for the inverter's forced charge/discharge holding registers.
 Commands (charge / discharge / hold / auto) are validated, power-clamped,
 SOC-guarded, and audited. A deadman watchdog reverts the inverter to
 self-consumption when a command's TTL expires, when SOC breaches limits,
-when the daemon shuts down, or when a startup reconciliation finds the
+when SOC telemetry is missing or stale, when the daemon shuts down, or
+when a startup reconciliation finds the
 inverter orphaned in forced mode. The inverter itself has NO forced-mode
 timeout, so this module's revert paths are the safety boundary.
 
@@ -18,6 +19,7 @@ Revert sequence:
     13050 = 0xCC (stop) -> 13049 = 0 (self-consumption)
 
 CHANGELOG:
+- 2026-09-05: Reject/revert forced charge/discharge on stale SOC (WIM-ACTION-39).
 - 2026-07-18: Initial creation -- battery-control Phase 1 (AC1-AC5)
 
 TODO:
@@ -30,6 +32,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -134,6 +137,9 @@ class SungrowController:
             Injectable for tests.
         modbus_lock: Shared lock serializing Modbus access with the poller.
         now_fn: Wall-clock source (epoch seconds). Injectable for tests.
+        monotonic_fn: Clock for SOC observation age. Injectable for tests.
+        soc_max_age_s: SOC expires at this age; the daemon passes three
+            configured poll intervals (15 seconds at the default interval).
     """
 
     def __init__(
@@ -149,7 +155,11 @@ class SungrowController:
         client_factory: Callable[[], Any] | None = None,
         modbus_lock: asyncio.Lock | None = None,
         now_fn: Callable[[], float] = time.time,
+        monotonic_fn: Callable[[], float] = time.monotonic,
+        soc_max_age_s: float = 15.0,
     ) -> None:
+        if not math.isfinite(soc_max_age_s) or soc_max_age_s <= 0:
+            raise ValueError("soc_max_age_s must be finite and positive")
         self._host = host
         self._port = port
         self._slave_id = slave_id
@@ -162,20 +172,35 @@ class SungrowController:
         )
         self._lock = modbus_lock or asyncio.Lock()
         self._now = now_fn
+        self._monotonic = monotonic_fn
+        self._soc_max_age_s = soc_max_age_s
         self._active: ActiveCommand | None = None
         self._last_soc_pct: float | None = None
+        self._last_soc_at: float | None = None
         self._load_state()
 
     # -- telemetry ---------------------------------------------------------
 
     def observe_soc(self, soc_pct: float | None) -> None:
-        """Record the latest battery SOC from the poll loop."""
-        if soc_pct is not None:
-            self._last_soc_pct = float(soc_pct)
+        """Record valid SOC on receipt; unavailable values invalidate it."""
+        if soc_pct is None or not math.isfinite(soc_pct) or not 0 <= soc_pct <= 100:
+            self._last_soc_pct = None
+            self._last_soc_at = None
+            return
+        self._last_soc_pct = float(soc_pct)
+        self._last_soc_at = self._monotonic()
 
     def observe(self, sample: Any) -> None:
         """Record telemetry from a normalized SungrowSample (best-effort)."""
         self.observe_soc(getattr(sample, "battery_soc_pct", None))
+
+    def _soc_unavailable_reason(self) -> str | None:
+        if self._last_soc_pct is None or self._last_soc_at is None:
+            return "no_telemetry"
+        age = self._monotonic() - self._last_soc_at
+        if not 0 <= age < self._soc_max_age_s:
+            return "stale_telemetry"
+        return None
 
     # -- public API --------------------------------------------------------
 
@@ -236,9 +261,14 @@ class SungrowController:
         if self._now() >= cmd.expires_at:
             await self._revert(reason="ttl_expired")
             return
-        soc = self._last_soc_pct
-        if soc is None:
+        if cmd.mode == "hold":
             return
+        reason = self._soc_unavailable_reason()
+        if reason is not None:
+            await self._revert(reason=reason)
+            return
+        soc = self._last_soc_pct
+        assert soc is not None
         if cmd.mode == "discharge" and soc <= self.limits.min_soc_pct:
             await self._revert(reason="soc_floor")
         elif cmd.mode == "charge" and soc >= self.limits.max_soc_pct:
@@ -275,7 +305,8 @@ class SungrowController:
                 await self._revert(reason="ttl_expired")
             else:
                 self._audit(
-                    "reconcile", note="resuming persisted active command",
+                    "reconcile",
+                    note="resuming persisted active command",
                     active=self._active.to_public(),
                 )
             return
@@ -307,7 +338,9 @@ class SungrowController:
         return {
             "dry_run": self.dry_run,
             "active": self._active.to_public() if self._active else None,
-            "last_soc_pct": self._last_soc_pct,
+            "last_soc_pct": (
+                self._last_soc_pct if self._soc_unavailable_reason() is None else None
+            ),
             "limits": asdict(self.limits),
             "now": _iso(self._now()),
         }
@@ -341,12 +374,14 @@ class SungrowController:
         if req.power_w <= 0:
             self._audit("command_rejected", reason="power", issuer=req.issuer)
             raise ControlError(f"power_w must be > 0 for {req.mode}")
-        soc = self._last_soc_pct
-        if soc is None:
-            self._audit("command_rejected", reason="no_telemetry", issuer=req.issuer)
+        reason = self._soc_unavailable_reason()
+        if reason is not None:
+            self._audit("command_rejected", reason=reason, issuer=req.issuer)
             raise ControlError(
-                "no SOC telemetry yet; refusing forced charge/discharge"
+                "SOC telemetry missing or stale; refusing forced charge/discharge"
             )
+        soc = self._last_soc_pct
+        assert soc is not None
         if req.mode == "discharge" and soc <= self.limits.min_soc_pct:
             self._audit("command_rejected", reason="soc_floor", issuer=req.issuer)
             raise ControlError(

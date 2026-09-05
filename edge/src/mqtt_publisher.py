@@ -112,8 +112,8 @@ class MqttPublisher:
         # Re-announce discovery on the next publish after every (re)connect so a
         # broker restart or a late connect never leaves HA without configs.
         self._discovery_sent = False
-        self._client = client if client is not None else self._build_client(
-            username, password
+        self._client = (
+            client if client is not None else self._build_client(username, password)
         )
 
     # ------------------------------------------------------------------
@@ -131,9 +131,7 @@ class MqttPublisher:
         if username:
             client.username_pw_set(username, password or None)
         # Last Will: mark offline if the daemon dies / disconnects ungracefully.
-        client.will_set(
-            self._availability_topic, payload="offline", qos=1, retain=True
-        )
+        client.will_set(self._availability_topic, payload="offline", qos=1, retain=True)
         client.on_connect = self._on_connect
         return client
 
@@ -184,9 +182,7 @@ class MqttPublisher:
         """
         if not self._discovery_sent:
             self._publish_discovery()
-            self._client.publish(
-                self._availability_topic, "online", qos=1, retain=True
-            )
+            self._client.publish(self._availability_topic, "online", qos=1, retain=True)
             self._discovery_sent = True
 
         self._client.publish(
@@ -216,9 +212,6 @@ class MqttPublisher:
                 config["unit_of_measurement"] = unit
             if state_class is not None:
                 config["state_class"] = state_class
-            topic = (
-                f"{self._discovery_prefix}/sensor/"
-                f"{self._object_id}/{key}/config"
-            )
+            topic = f"{self._discovery_prefix}/sensor/{self._object_id}/{key}/config"
             self._client.publish(topic, json.dumps(config), qos=1, retain=True)
         logger.info("Published HA MQTT discovery for %d sensors", len(_SENSORS))

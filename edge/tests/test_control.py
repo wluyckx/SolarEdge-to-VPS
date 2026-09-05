@@ -7,6 +7,7 @@ the TTL deadman watchdog, state persistence across restarts, startup
 reconciliation of orphaned force mode, and the audit trail.
 
 CHANGELOG:
+- 2026-09-05: Cover stale SOC safety guards (WIM-ACTION-39).
 - 2026-07-18: Initial creation -- TDD tests written first (battery-control AC1-AC5)
 
 TODO:
@@ -109,6 +110,8 @@ def make_controller(
     *,
     dry_run: bool = False,
     limits: ControlLimits | None = None,
+    monotonic_clock: FakeClock | None = None,
+    soc_max_age_s: float = 15.0,
 ) -> SungrowController:
     return SungrowController(
         host="192.0.2.1",
@@ -120,6 +123,8 @@ def make_controller(
         audit_path=str(tmp_path / "control-audit.jsonl"),
         client_factory=lambda: fake_client,
         now_fn=clock,
+        monotonic_fn=monotonic_clock or clock,
+        soc_max_age_s=soc_max_age_s,
     )
 
 
@@ -349,6 +354,7 @@ async def test_watchdog_noop_before_expiry(tmp_path, fake_client, clock):
     await ctrl.apply(_cmd(ttl_s=300))
     fake_client.writes.clear()
     clock.advance(100)
+    ctrl.observe_soc(50.0)
     await ctrl.watchdog_tick()
     assert fake_client.writes == []
     assert ctrl.status()["active"] is not None
@@ -499,6 +505,142 @@ async def test_audit_records_rejection(tmp_path, fake_client, clock):
 def test_default_soc_ceiling_is_95():
     """LFP calendar-aging default: don't park at 100% unless deliberate."""
     assert ControlLimits().max_soc_pct == 95.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["charge", "discharge"])
+async def test_stale_soc_refuses_new_force(tmp_path, fake_client, clock, mode):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    ctrl.observe_soc(50.0)
+    clock.advance(15)
+    with pytest.raises(ControlError, match="stale"):
+        await ctrl.apply(_cmd(mode=mode))
+    assert fake_client.writes == []
+    assert ctrl.status()["last_soc_pct"] is None
+    assert _audit_events(tmp_path)[-1]["reason"] == "stale_telemetry"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["charge", "discharge"])
+@pytest.mark.parametrize("dry_run", [False, True])
+async def test_stale_soc_reverts_at_deadline(
+    tmp_path, fake_client, clock, mode, dry_run
+):
+    ctrl = make_controller(tmp_path, fake_client, clock, dry_run=dry_run)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd(mode=mode))
+    fake_client.writes.clear()
+    clock.advance(14.99)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is not None
+    assert fake_client.writes == []
+    clock.advance(0.01)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+    assert fake_client.writes == (
+        [] if dry_run else [(REG_FORCE_CMD, CMD_STOP), (REG_EMS_MODE, EMS_MODE_SELF)]
+    )
+    assert _audit_events(tmp_path)[-1]["reason"] == "stale_telemetry"
+
+
+@pytest.mark.asyncio
+async def test_fresh_unchanged_soc_renews_deadline(tmp_path, fake_client, clock):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd())
+    for _ in range(5):
+        clock.advance(10)
+        ctrl.observe_soc(50.0)
+        await ctrl.watchdog_tick()
+        assert ctrl.status()["active"] is not None
+    clock.advance(15)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+    ctrl.observe_soc(50.0)
+    assert (await ctrl.apply(_cmd()))["accepted"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), -1, 101])
+async def test_invalid_soc_cannot_refresh_telemetry(
+    tmp_path, fake_client, clock, invalid
+):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd())
+    clock.advance(10)
+    ctrl.observe_soc(invalid)
+    clock.advance(5)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+    with pytest.raises(ControlError, match="telemetry"):
+        await ctrl.apply(_cmd())
+
+
+@pytest.mark.asyncio
+async def test_stale_revert_retries_on_next_tick(tmp_path, fake_client, clock):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd())
+    clock.advance(15)
+    fake_client.writes.clear()
+    fake_client.fail_writes_at = {0}
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is not None
+    assert _audit_events(tmp_path)[-1]["event"] == "revert_failed"
+    fake_client.fail_writes_at.clear()
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+
+
+@pytest.mark.asyncio
+async def test_restart_does_not_trust_persisted_command_without_soc(
+    tmp_path, fake_client, clock
+):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd())
+    restarted = make_controller(tmp_path, fake_client, clock)
+    await restarted.watchdog_tick()
+    assert restarted.status()["active"] is None
+    assert _audit_events(tmp_path)[-1]["reason"] == "no_telemetry"
+
+
+@pytest.mark.asyncio
+async def test_soc_age_uses_monotonic_clock(tmp_path, fake_client, clock):
+    monotonic = FakeClock(0)
+    ctrl = make_controller(tmp_path, fake_client, clock, monotonic_clock=monotonic)
+    ctrl.observe_soc(50.0)
+    await ctrl.apply(_cmd())
+    clock.advance(-3600)
+    monotonic.advance(15)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+    assert _audit_events(tmp_path)[-1]["reason"] == "stale_telemetry"
+
+
+@pytest.mark.asyncio
+async def test_soc_age_respects_configured_interval(tmp_path, fake_client, clock):
+    ctrl = make_controller(tmp_path, fake_client, clock, soc_max_age_s=90)
+    ctrl.observe_soc(50.0)
+    clock.advance(89)
+    await ctrl.apply(_cmd())
+    clock.advance(1)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"] is None
+
+
+@pytest.mark.asyncio
+async def test_hold_and_auto_remain_available_without_fresh_soc(
+    tmp_path, fake_client, clock
+):
+    ctrl = make_controller(tmp_path, fake_client, clock)
+    await ctrl.apply(_cmd(mode="hold"))
+    clock.advance(15)
+    await ctrl.watchdog_tick()
+    assert ctrl.status()["active"]["mode"] == "hold"
+    await ctrl.apply(_cmd(mode="auto"))
+    assert ctrl.status()["active"] is None
 
 
 def test_observe_reads_sample_soc_field():
